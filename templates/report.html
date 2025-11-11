@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - NOA SQL Scanner{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="fas fa-file-alt"></i> Scan Reports</h1>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Scan ID</th>
+                        <th>Target URL</th>
+                        <th>Started</th>
+                        <th>Completed</th>
+                        <th>Status</th>
+                        <th>URLs Scanned</th>
+                        <th>Vulnerabilities</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for scan in scans %}
+                    <tr>
+                        <td><code>{{ scan.scan_id[:8] }}...</code></td>
+                        <td><a href="{{ scan.target_url }}" target="_blank">{{ scan.target_url[:50] }}...</a></td>
+                        <td>{{ scan.started_at }}</td>
+                        <td>{{ scan.completed_at or 'N/A' }}</td>
+                        <td>
+                            {% if scan.status == 'completed' %}
+                            <span class="badge bg-success">Completed</span>
+                            {% elif scan.status == 'running' %}
+                            <span class="badge bg-warning">Running</span>
+                            {% elif scan.status == 'stopped' %}
+                            <span class="badge bg-secondary">Stopped</span>
+                            {% else %}
+                            <span class="badge bg-danger">Error</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ scan.urls_scanned }}</td>
+                        <td>
+                            {% if scan.vulnerabilities_count > 0 %}
+                            <span class="badge bg-danger">{{ scan.vulnerabilities_count }}</span>
+                            {% else %}
+                            <span class="badge bg-success">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('view_report', scan_id=scan.scan_id) }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
