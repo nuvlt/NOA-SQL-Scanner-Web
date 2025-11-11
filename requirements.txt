@@ -1,0 +1,18 @@
+Flask==3.0.0
+Flask-SocketIO==5.3.5
+python-socketio==5.10.0
+eventlet==0.33.3
+requests==2.31.0
+beautifulsoup4==4.12.2
+dnspython==2.4.2
+lxml==4.9.3
+colorama==0.4.6
+urllib3==2.1.0
+gunicorn==21.2.0
+gevent==23.9.1
+gevent-websocket==0.10.1
+```
+
+## `Procfile` (Render için)
+```
+web: gunicorn --worker-class eventlet -w 1 app:app
