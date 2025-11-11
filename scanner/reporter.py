@@ -3,7 +3,10 @@ NOA SQL Scanner - Report Generation
 """
 
 from datetime import datetime
-from config import Colors
+try:
+    from .config import Colors
+except ImportError:
+    from config import Colors
 
 class Reporter:
     def __init__(self, target_url):
