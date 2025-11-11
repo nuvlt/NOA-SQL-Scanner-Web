@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Dork Search - NOA SQL Scanner{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="fas fa-binoculars"></i> Dork Search</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-search"></i> Search Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="dork_query" class="form-label">Dork Query</label>
+                        <input type="text" class="form-control" id="dork_query" name="dork_query" 
+                               placeholder='inurl:".php?id="' required>
+                        <small class="form-text text-muted">
+                            Enter Google or Yandex dork query to find potential vulnerable URLs
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="engine" class="form-label">Search Engine</label>
+                        <select class="form-select" id="engine" name="engine">
+                            <option value="google">Google</option>
+                            <option value="yandex">Yandex</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="max_results" class="form-label">Max Results</label>
+                        <input type="number" class="form-control" id="max_results" name="max_results" 
+                               value="50" min="10" max="100">
+                    </div>
+                    
+                    <div class="alert alert-info" role="alert">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> Dork searches may be rate-limited by search engines. 
+                        Results may take several minutes to complete.
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success btn-lg w-100">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="fas fa-list"></i> Predefined Dorks</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Click to use:</p>
+                <div class="list-group">
+                    {% for dork in predefined_dorks %}
+                    <button type="button" class="list-group-item list-group-item-action dork-preset" 
+                            data-dork="{{ dork }}">
+                        <small><code>{{ dork }}</code></small>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-book"></i> Dork Examples</h5>
+            </div>
+            <div class="card-body">
+                <h6>SQL Injection:</h6>
+                <ul class="small">
+                    <li><code>inurl:".php?id="</code></li>
+                    <li><code>inurl:"product.php?id="</code></li>
+                    <li><code>inurl:"news.php?id="</code></li>
+                </ul>
+                
+                <h6>By Extension:</h6>
+                <ul class="small">
+                    <li><code>inurl:".php?catid="</code></li>
+                    <li><code>inurl:".asp?id="</code></li>
+                    <li><code>inurl:".aspx?id="</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.querySelectorAll('.dork-preset').forEach(button => {
+        button.addEventListener('click', function() {
+            document.getElementById('dork_query').value = this.dataset.dork;
+        });
+    });
+</script>
+{% endblock %}
