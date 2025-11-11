@@ -1,19 +1,90 @@
-services:
-  - type: web
-    name: noa-sql-scanner
-    env: docker
-    plan: free
-    region: frankfurt
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT app:app
-    envVars:
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ACCESS_PASSWORD
-        value: NOA2025SecurePass!
-      - key: FLASK_ENV
-        value: production
-      - key: PYTHONUNBUFFERED
-        value: 1
-      - key: DATABASE_PATH
-        value: /opt/render/project/src/noa_scanner.db
+{% extends "base.html" %}
+
+{% block title %}Dashboard - NOA SQL Scanner{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
+
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h5 class="card-title">Total Scans</h5>
+                <h2>{{ stats.total_scans }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-danger">
+            <div class="card-body">
+                <h5 class="card-title">Vulnerabilities</h5>
+                <h2>{{ stats.total_vulnerabilities }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">Completed</h5>
+                <h2>{{ stats.status_counts.get('completed', 0) }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <h5 class="card-title">Running</h5>
+                <h2>{{ stats.status_counts.get('running', 0) }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <h3>Recent Scans</h3>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Target URL</th>
+                        <th>Started</th>
+                        <th>Status</th>
+                        <th>Vulnerabilities</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for scan in recent_scans %}
+                    <tr>
+                        <td>{{ scan.target_url }}</td>
+                        <td>{{ scan.started_at }}</td>
+                        <td>
+                            {% if scan.status == 'completed' %}
+                            <span class="badge bg-success">{{ scan.status }}</span>
+                            {% elif scan.status == 'running' %}
+                            <span class="badge bg-warning">{{ scan.status }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ scan.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if scan.vulnerabilities_count > 0 %}
+                            <span class="badge bg-danger">{{ scan.vulnerabilities_count }}</span>
+                            {% else %}
+                            <span class="badge bg-success">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('view_report', scan_id=scan.scan_id) }}" class="btn btn-sm btn-info">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
