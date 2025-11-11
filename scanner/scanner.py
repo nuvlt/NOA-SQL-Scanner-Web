@@ -8,8 +8,14 @@ import random
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from payloads import get_all_payloads
 from detector import VulnerabilityDetector
-from config import (
-    USER_AGENTS, RATE_LIMIT_DELAY, REQUEST_TIMEOUT, Colors
+try:
+    from .payloads import get_all_payloads
+    from .detector import VulnerabilityDetector
+    from .config import USER_AGENTS, RATE_LIMIT_DELAY, REQUEST_TIMEOUT, Colors
+except ImportError:
+    from payloads import get_all_payloads
+    from detector import VulnerabilityDetector
+    from config import USER_AGENTS, RATE_LIMIT_DELAY, REQUEST_TIMEOUT, Colors
 )
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
