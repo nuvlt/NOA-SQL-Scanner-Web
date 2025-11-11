@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Progress - NOA SQL Scanner{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="fas fa-spinner fa-spin"></i> Scan in Progress</h1>
+
+<div class="card">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">
+            <i class="fas fa-crosshairs"></i> Target: 
+            <span id="target-url">{{ scan_info.target_url if scan_info else 'Loading...' }}</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <h6>Scan Progress</h6>
+            <div class="progress" style="height: 30px;">
+                <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                     role="progressbar" style="width: 0%">0%</div>
+            </div>
+            <p id="progress-message" class="text-muted mt-2">Initializing scan...</p>
+        </div>
+        
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h4 id="urls-found">0</h4>
+                        <small>URLs Found</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h4 id="urls-scanned">0</h4>
+                        <small>URLs Scanned</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h4 id="vulns-found" class="text-danger">0</h4>
+                        <small>Vulnerabilities Found</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="vulnerabilities-section" style="display: none;">
+            <h5 class="text-danger"><i class="fas fa-exclamation-triangle"></i> Vulnerabilities Detected!</h5>
+            <div id="vulnerabilities-list" class="list-group mb-3"></div>
+        </div>
+        
+        <div id="scan-log" class="bg-dark text-light p-3 rounded" style="height: 300px; overflow-y: auto; font-family: monospace;">
+            <div id="log-content"></div>
+        </div>
+        
+        <div class="mt-3">
+            <button id="stop-scan" class="btn btn-danger">
+                <i class="fas fa-stop"></i> Stop Scan
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-home"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    const scanId = "{{ scan_id }}";
+    const socket = io();
+    
+    socket.on('connect', function() {
+        console.log('Connected to server');
+        socket.emit('subscribe_scan', {scan_id: scanId});
+        addLog('Connected to scan session');
+    });
+    
+    socket.on('scan_progress', function(data) {
+        if (data.scan_id === scanId) {
+            updateProgress(data.progress, data.message);
+            addLog(data.message);
+        }
+    });
+    
+    socket.on('vulnerability_found', function(data) {
+        if (data.scan_id === scanId) {
+            addVulnerability(data.vulnerability);
+            updateVulnCount();
+            addLog('🚨 VULNERABILITY FOUND!', 'danger');
+        }
+    });
+    
+    function updateProgress(percent, message) {
+        const progressBar = document.getElementById('progress-bar');
+        progressBar.style.width = percent + '%';
+        progressBar.textContent = percent + '%';
+        document.getElementById('progress-message').textContent = message;
+        
+        if (percent === 100) {
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-success');
+            document.getElementById('stop-scan').disabled = true;
+        }
+    }
+    
+    function addLog(message, type = 'info') {
+        const logContent = document.getElementById('log-content');
+        const timestamp = new Date().toLocaleTimeString();
+        const color = type === 'danger' ? 'text-danger' : 'text-info';
+        logContent.innerHTML += `<div class="${color}">[${timestamp}] ${message}</div>`;
+        logContent.scrollTop = logContent.scrollHeight;
+    }
+    
+    function addVulnerability(vuln) {
+        const section = document.getElementById('vulnerabilities-section');
+        const list = document.getElementById('vulnerabilities-list');
+        
+        section.style.display = 'block';
+        
+        const item = document.createElement('div');
+        item.className = 'list-group-item list-group-item-danger';
+        item.innerHTML = `
+            <h6 class="mb-1"><i class="fas fa-bug"></i> ${vuln.attack_type} - ${vuln.db_type}</h6>
+            <p class="mb-1"><strong>URL:</strong> ${vuln.url}</p>
+            <p class="mb-1"><strong>Parameter:</strong> ${vuln.parameter}</p>
+            <small><strong>Payload:</strong> <code>${vuln.payload}</code></small>
+        `;
+        list.appendChild(item);
+    }
+    
+    function updateVulnCount() {
+        const count = document.querySelectorAll('#vulnerabilities-list .list-group-item').length;
+        document.getElementById('vulns-found').textContent = count;
+    }
+    
+    document.getElementById('stop-scan').addEventListener('click', function() {
+        if (confirm('Are you sure you want to stop this scan?')) {
+            fetch(`/api/scan/stop/${scanId}`, {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    addLog('Scan stopped by user', 'warning');
+                    this.disabled = true;
+                });
+        }
+    });
+    
+    // Poll for updates
+    setInterval(function() {
+        fetch(`/api/scan/status/${scanId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data) {
+                    document.getElementById('urls-found').textContent = data.urls_found || 0;
+                    document.getElementById('urls-scanned').textContent = data.urls_scanned || 0;
+                }
+            });
+    }, 2000);
+</script>
+{% endblock %}
