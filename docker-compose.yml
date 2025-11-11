@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key}
+      - ACCESS_PASSWORD=${ACCESS_PASSWORD:-NOA2025SecurePass!}
+      - FLASK_ENV=production
+    volumes:
+      - ./reports:/app/reports
+      - ./noa_scanner.db:/app/noa_scanner.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
