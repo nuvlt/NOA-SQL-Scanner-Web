@@ -8,11 +8,17 @@ from datetime import datetime
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'scanner'))
-
-from scanner.crawler import Crawler
-from scanner.scanner import SQLScanner
-from scanner.reporter import Reporter
+# Import'ları düzelt
+try:
+    from scanner.crawler import Crawler
+    from scanner.scanner import SQLScanner
+    from scanner.reporter import Reporter
+except ModuleNotFoundError:
+    # Eğer package import çalışmazsa, direkt import dene
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'scanner'))
+    from crawler import Crawler
+    from scanner import SQLScanner
+    from reporter import Reporter
 
 class ScannerAPI:
     def __init__(self, socketio=None, database=None):
