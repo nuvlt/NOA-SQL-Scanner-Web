@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 from bs4 import BeautifulSoup
 from collections import deque
 import random
-from config import (
+from .config import (
     SUBDOMAIN_WORDLIST, USER_AGENTS, MAX_URLS, 
     MAX_CRAWL_DEPTH, RATE_LIMIT_DELAY, REQUEST_TIMEOUT, Colors
 )
