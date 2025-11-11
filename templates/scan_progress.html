@@ -2,6 +2,12 @@
 
 {% block title %}Scan Progress - NOA SQL Scanner{% endblock %}
 
+{% block extra_js %}
+<!-- Socket.IO önce yüklensin -->
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/scanner.js') }}"></script>
+{% endblock %}
+
 {% block content %}
 <h1 class="mb-4"><i class="fas fa-spinner fa-spin"></i> Scan in Progress</h1>
 
@@ -59,7 +65,7 @@
         </div>
         
         <div class="mt-3">
-            <button id="stop-scan" class="btn btn-danger">
+            <button id="stop-scan" class="btn btn-danger" onclick="stopScan('{{ scan_id }}')">
                 <i class="fas fa-stop"></i> Stop Scan
             </button>
             <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
@@ -70,94 +76,15 @@
 </div>
 
 <script>
-    const scanId = "{{ scan_id }}";
-    const socket = io();
-    
-    socket.on('connect', function() {
-        console.log('Connected to server');
-        socket.emit('subscribe_scan', {scan_id: scanId});
-        addLog('Connected to scan session');
-    });
-    
-    socket.on('scan_progress', function(data) {
-        if (data.scan_id === scanId) {
-            updateProgress(data.progress, data.message);
-            addLog(data.message);
-        }
-    });
-    
-    socket.on('vulnerability_found', function(data) {
-        if (data.scan_id === scanId) {
-            addVulnerability(data.vulnerability);
-            updateVulnCount();
-            addLog('🚨 VULNERABILITY FOUND!', 'danger');
-        }
-    });
-    
-    function updateProgress(percent, message) {
-        const progressBar = document.getElementById('progress-bar');
-        progressBar.style.width = percent + '%';
-        progressBar.textContent = percent + '%';
-        document.getElementById('progress-message').textContent = message;
+    // Page yüklendikten sonra WebSocket'i başlat
+    document.addEventListener('DOMContentLoaded', function() {
+        const scanId = "{{ scan_id }}";
         
-        if (percent === 100) {
-            progressBar.classList.remove('progress-bar-animated');
-            progressBar.classList.add('bg-success');
-            document.getElementById('stop-scan').disabled = true;
-        }
-    }
-    
-    function addLog(message, type = 'info') {
-        const logContent = document.getElementById('log-content');
-        const timestamp = new Date().toLocaleTimeString();
-        const color = type === 'danger' ? 'text-danger' : 'text-info';
-        logContent.innerHTML += `<div class="${color}">[${timestamp}] ${message}</div>`;
-        logContent.scrollTop = logContent.scrollHeight;
-    }
-    
-    function addVulnerability(vuln) {
-        const section = document.getElementById('vulnerabilities-section');
-        const list = document.getElementById('vulnerabilities-list');
+        // WebSocket'i başlat
+        initializeWebSocket(scanId);
         
-        section.style.display = 'block';
-        
-        const item = document.createElement('div');
-        item.className = 'list-group-item list-group-item-danger';
-        item.innerHTML = `
-            <h6 class="mb-1"><i class="fas fa-bug"></i> ${vuln.attack_type} - ${vuln.db_type}</h6>
-            <p class="mb-1"><strong>URL:</strong> ${vuln.url}</p>
-            <p class="mb-1"><strong>Parameter:</strong> ${vuln.parameter}</p>
-            <small><strong>Payload:</strong> <code>${vuln.payload}</code></small>
-        `;
-        list.appendChild(item);
-    }
-    
-    function updateVulnCount() {
-        const count = document.querySelectorAll('#vulnerabilities-list .list-group-item').length;
-        document.getElementById('vulns-found').textContent = count;
-    }
-    
-    document.getElementById('stop-scan').addEventListener('click', function() {
-        if (confirm('Are you sure you want to stop this scan?')) {
-            fetch(`/api/scan/stop/${scanId}`, {method: 'POST'})
-                .then(response => response.json())
-                .then(data => {
-                    addLog('Scan stopped by user', 'warning');
-                    this.disabled = true;
-                });
-        }
+        // Status polling'i başlat
+        pollScanStatus(scanId);
     });
-    
-    // Poll for updates
-    setInterval(function() {
-        fetch(`/api/scan/status/${scanId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data) {
-                    document.getElementById('urls-found').textContent = data.urls_found || 0;
-                    document.getElementById('urls-scanned').textContent = data.urls_scanned || 0;
-                }
-            });
-    }, 2000);
 </script>
 {% endblock %}
