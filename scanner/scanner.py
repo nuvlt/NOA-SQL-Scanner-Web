@@ -5,17 +5,19 @@ SQL Scanner - Main SQL Injection Testing Engine
 import time
 import requests
 import random
+import urllib3
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+# Paket içi (relative) import deneyip başarısız olursa fallback olarak absolute import kullan
 try:
     from .payloads import get_all_payloads
     from .detector import VulnerabilityDetector
     from .config import USER_AGENTS, RATE_LIMIT_DELAY, REQUEST_TIMEOUT, Colors
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     from payloads import get_all_payloads
     from detector import VulnerabilityDetector
     from config import USER_AGENTS, RATE_LIMIT_DELAY, REQUEST_TIMEOUT, Colors
-)
 
-import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class SQLScanner:
