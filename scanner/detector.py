@@ -4,7 +4,10 @@ NOA SQL Scanner - Vulnerability Detection Logic
 
 import re
 import time
-from config import ERROR_PATTERNS, TIME_BASED_THRESHOLD, Colors
+try:
+    from .config import ERROR_PATTERNS, TIME_BASED_THRESHOLD, Colors
+except ImportError:
+    from config import ERROR_PATTERNS, TIME_BASED_THRESHOLD, Colors
 
 class VulnerabilityDetector:
     def __init__(self):
