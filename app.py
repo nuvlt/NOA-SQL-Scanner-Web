@@ -242,7 +242,7 @@ def internal_error(error):
 def health():
     return jsonify({'status': 'healthy', 'version': '1.9.0.3'}), 200
 
+# For local development only
 if __name__ == '__main__':
-    # Production mode
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
