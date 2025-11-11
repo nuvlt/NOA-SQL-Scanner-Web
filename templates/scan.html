@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}New Scan - NOA SQL Scanner{% endblock %}
+
+{% block content %}
+<h1 class="mb-4"><i class="fas fa-search"></i> New Scan</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-crosshairs"></i> Target Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="url" class="form-label">Target URL</label>
+                        <input type="url" class="form-control" id="url" name="url" 
+                               placeholder="https://example.com" required>
+                        <small class="form-text text-muted">
+                            Enter the target URL to scan for SQL injection vulnerabilities
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Scan Options</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="subdomains" name="subdomains">
+                            <label class="form-check-label" for="subdomains">
+                                <i class="fas fa-sitemap"></i> Enable Subdomain Discovery
+                                <small class="d-block text-muted">Discover and scan subdomains (DNS + Certificate Transparency)</small>
+                            </label>
+                        </div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="deep" name="deep">
+                            <label class="form-check-label" for="deep">
+                                <i class="fas fa-layer-group"></i> Enable Deep Crawling
+                                <small class="d-block text-muted">Crawl up to 500 URLs (may take longer)</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> Only scan systems you have explicit permission to test. 
+                        Unauthorized testing is illegal.
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        <i class="fas fa-play"></i> Start Scan
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Scan Information</h5>
+            </div>
+            <div class="card-body">
+                <h6><i class="fas fa-shield-alt"></i> What We Test:</h6>
+                <ul>
+                    <li>Error-Based SQL Injection</li>
+                    <li>Boolean-Based Blind SQLi</li>
+                    <li>Time-Based Blind SQLi</li>
+                    <li>UNION-Based SQLi</li>
+                </ul>
+                
+                <h6 class="mt-3"><i class="fas fa-database"></i> Supported Databases:</h6>
+                <ul>
+                    <li>MySQL</li>
+                    <li>PostgreSQL</li>
+                </ul>
+                
+                <h6 class="mt-3"><i class="fas fa-clock"></i> Scan Duration:</h6>
+                <p class="text-muted">
+                    Typical scan: 5-15 minutes<br>
+                    Deep scan: 15-45 minutes<br>
+                    With subdomains: 30-90 minutes
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
