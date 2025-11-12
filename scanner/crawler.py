@@ -9,6 +9,13 @@ import dns.resolver
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 from bs4 import BeautifulSoup
 from collections import deque
+import tldextract
+def _extract_base_domain(self, domain):
+    """Extract base domain from subdomain"""
+    ext = tldextract.extract(domain)
+    if ext.domain and ext.suffix:
+        return f"{ext.domain}.{ext.suffix}"
+    return domain
 import random
 from .config import (
     SUBDOMAIN_WORDLIST, USER_AGENTS, MAX_URLS, 
