@@ -128,26 +128,63 @@ def dork_search():
         if max_results > Config.DORK_MAX_RESULTS:
             max_results = Config.DORK_MAX_RESULTS
         
+        all_urls = []
+        errors = []
+        
         try:
-            # Perform dork search
+            flash('Searching... This may take a few minutes.', 'info')
+            
+            # Try primary engine
             if search_engine == 'google':
                 dork = GoogleDork()
-            else:
+                try:
+                    urls = dork.search(dork_query, max_results)
+                    all_urls.extend(urls)
+                    if not urls:
+                        errors.append('Google returned no results or rate limited')
+                except Exception as e:
+                    errors.append(f'Google error: {str(e)}')
+                
+                # If Google failed or low results, try Yandex as backup
+                if len(all_urls) < 10:
+                    try:
+                        flash('Trying Yandex as backup...', 'info')
+                        yandex = YandexDork()
+                        yandex_urls = yandex.search(dork_query, max_results)
+                        all_urls.extend(yandex_urls)
+                    except Exception as e:
+                        errors.append(f'Yandex backup error: {str(e)}')
+            
+            else:  # Yandex
                 dork = YandexDork()
+                try:
+                    urls = dork.search(dork_query, max_results)
+                    all_urls.extend(urls)
+                    if not urls:
+                        errors.append('Yandex returned no results')
+                except Exception as e:
+                    errors.append(f'Yandex error: {str(e)}')
             
-            flash('Searching... This may take a few minutes.', 'info')
-            urls = dork.search(dork_query, max_results)
+            # Remove duplicates
+            all_urls = list(set(all_urls))
             
-            # Eğer sonuç yoksa demo URL'leri göster
-            if not urls:
-                flash('No results found from search engine. Showing demo vulnerable URLs for testing.', 'warning')
-                urls = DEMO_URLS
+            # Show errors
+            if errors:
+                for error in errors:
+                    flash(error, 'warning')
+            
+            # If still no results, use demo URLs
+            if not all_urls:
+                flash('No results found. Showing demo vulnerable URLs for testing.', 'warning')
+                from dork_engine import DEMO_URLS
+                all_urls = DEMO_URLS
             
             # Save to database
-            dork_id = db.save_dork_results(dork_query, search_engine, urls)
+            if all_urls:
+                dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
+                flash(f'Found {len(all_urls)} URLs!', 'success')
             
-            flash(f'Found {len(urls)} URLs!', 'success')
-            return render_template('dork_results.html', urls=urls, dork_query=dork_query)
+            return render_template('dork_results.html', urls=all_urls, dork_query=dork_query, errors=errors)
         
         except Exception as e:
             flash(f'Error during search: {str(e)}', 'danger')
