@@ -85,6 +85,10 @@
         
         // Status polling'i başlat
         pollScanStatus(scanId);
+        socket.on('scan_log', function(data) {
+    if (data.scan_id === scanId) {
+        addLog(data.message, data.level);
+    }
     });
 </script>
 {% endblock %}
