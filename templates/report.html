@@ -1,62 +1,107 @@
 {% extends "base.html" %}
 
-{% block title %}Reports - NOA SQL Scanner{% endblock %}
+{% block title %}Report - NOA SQL Scanner{% endblock %}
 
 {% block content %}
-<h1 class="mb-4"><i class="fas fa-file-alt"></i> Scan Reports</h1>
+<h1 class="mb-4"><i class="fas fa-file-alt"></i> Scan Report</h1>
 
-<div class="card">
+{% if not scan %}
+<div class="alert alert-danger">
+    <i class="fas fa-exclamation-triangle"></i>
+    <strong>Error:</strong> Report not found or scan is still in progress.
+</div>
+<a href="{{ url_for('reports') }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i> Back to Reports
+</a>
+{% else %}
+
+<div class="card mb-3">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="fas fa-info-circle"></i> Scan Information</h5>
+    </div>
     <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>Scan ID</th>
-                        <th>Target URL</th>
-                        <th>Started</th>
-                        <th>Completed</th>
-                        <th>Status</th>
-                        <th>URLs Scanned</th>
-                        <th>Vulnerabilities</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for scan in scans %}
-                    <tr>
-                        <td><code>{{ scan.scan_id[:8] }}...</code></td>
-                        <td><a href="{{ scan.target_url }}" target="_blank">{{ scan.target_url[:50] }}...</a></td>
-                        <td>{{ scan.started_at }}</td>
-                        <td>{{ scan.completed_at or 'N/A' }}</td>
-                        <td>
-                            {% if scan.status == 'completed' %}
-                            <span class="badge bg-success">Completed</span>
-                            {% elif scan.status == 'running' %}
-                            <span class="badge bg-warning">Running</span>
-                            {% elif scan.status == 'stopped' %}
-                            <span class="badge bg-secondary">Stopped</span>
-                            {% else %}
-                            <span class="badge bg-danger">Error</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ scan.urls_scanned }}</td>
-                        <td>
-                            {% if scan.vulnerabilities_count > 0 %}
-                            <span class="badge bg-danger">{{ scan.vulnerabilities_count }}</span>
-                            {% else %}
-                            <span class="badge bg-success">0</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{{ url_for('view_report', scan_id=scan.scan_id) }}" class="btn btn-sm btn-primary">
-                                <i class="fas fa-eye"></i> View
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Target URL:</strong> <a href="{{ scan.target_url }}" target="_blank">{{ scan.target_url }}</a></p>
+                <p><strong>Scan ID:</strong> <code>{{ scan.scan_id }}</code></p>
+                <p><strong>Status:</strong> 
+                    {% if scan.status == 'completed' %}
+                    <span class="badge bg-success">{{ scan.status }}</span>
+                    {% elif scan.status == 'running' %}
+                    <span class="badge bg-warning">{{ scan.status }}</span>
+                    {% else %}
+                    <span class="badge bg-secondary">{{ scan.status }}</span>
+                    {% endif %}
+                </p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Started:</strong> {{ scan.started_at }}</p>
+                <p><strong>Completed:</strong> {{ scan.completed_at or 'N/A' }}</p>
+                <p><strong>URLs Scanned:</strong> {{ scan.urls_scanned or 0 }}</p>
+                <p><strong>Vulnerabilities:</strong> 
+                    {% if vulnerabilities|length > 0 %}
+                    <span class="badge bg-danger">{{ vulnerabilities|length }}</span>
+                    {% else %}
+                    <span class="badge bg-success">0</span>
+                    {% endif %}
+                </p>
+            </div>
         </div>
     </div>
 </div>
+
+{% if vulnerabilities %}
+<div class="card">
+    <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> Vulnerabilities Found ({{ vulnerabilities|length }})</h5>
+    </div>
+    <div class="card-body">
+        {% for vuln in vulnerabilities %}
+        <div class="card mb-3 border-danger">
+            <div class="card-header bg-danger text-white">
+                <h6 class="mb-0">Vulnerability #{{ loop.index }} - {{ vuln.attack_type }}</h6>
+            </div>
+            <div class="card-body">
+                <p><strong>URL:</strong> <code>{{ vuln.url }}</code></p>
+                <p><strong>Parameter:</strong> <code>{{ vuln.parameter }}</code></p>
+                <p><strong>Database Type:</strong> <span class="badge bg-info">{{ vuln.db_type }}</span></p>
+                <p><strong>Attack Type:</strong> <span class="badge bg-warning">{{ vuln.attack_type }}</span></p>
+                <p><strong>Payload:</strong></p>
+                <pre class="bg-dark text-light p-2 rounded"><code>{{ vuln.payload }}</code></pre>
+                <p><strong>Evidence:</strong></p>
+                <pre class="bg-light p-2 rounded border"><code>{{ vuln.evidence[:500] }}...</code></pre>
+                
+                <div class="alert alert-warning mt-3">
+                    <h6><i class="fas fa-shield-alt"></i> Remediation:</h6>
+                    <ul>
+                        <li>Use parameterized queries (prepared statements)</li>
+                        <li>Implement input validation and sanitization</li>
+                        <li>Apply principle of least privilege for database accounts</li>
+                        <li>Use Web Application Firewall (WAF)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="alert alert-success">
+    <i class="fas fa-check-circle"></i>
+    <strong>Good News!</strong> No SQL injection vulnerabilities were detected in this scan.
+</div>
+{% endif %}
+
+<div class="mt-3">
+    <a href="{{ url_for('reports') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Reports
+    </a>
+    {% if scan.report_file %}
+    <a href="{{ url_for('download_report', scan_id=scan.scan_id) }}" class="btn btn-primary">
+        <i class="fas fa-download"></i> Download Report
+    </a>
+    {% endif %}
+</div>
+
+{% endif %}
 {% endblock %}
