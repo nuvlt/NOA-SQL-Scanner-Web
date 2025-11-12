@@ -39,11 +39,10 @@ class GoogleDork(DorkEngine):
     
     def search(self, dork, max_results=50):
         """
-        Search Google with dork
-        Returns list of URLs
+        Search Google with dork - Enhanced for better results
         """
         urls = []
-        num_pages = min((max_results // 10) + 1, 3)  # Max 3 sayfa
+        num_pages = min((max_results // 10) + 1, 5)  # Max 5 page
         
         print(f"[*] Searching Google for: {dork}")
         
@@ -53,58 +52,140 @@ class GoogleDork(DorkEngine):
                     'q': dork,
                     'start': page * 10,
                     'num': 10,
-                    'hl': 'en'
+                    'hl': 'en',
+                    'filter': 0  # Don't filter similar results
                 }
                 
-                print(f"[*] Fetching page {page + 1}...")
+                print(f"[*] Page {page + 1}/{num_pages}...")
                 
                 response = requests.get(
                     self.base_url,
                     params=params,
                     headers=self.get_headers(),
-                    timeout=15,
+                    timeout=20,
                     allow_redirects=True
                 )
                 
-                print(f"[*] Response status: {response.status_code}")
+                print(f"[*] Response: {response.status_code}")
+                
+                if response.status_code == 429:
+                    print(f"[!] Rate limited by Google after {page + 1} pages")
+                    print(f"[*] Collected {len(urls)} URLs before rate limit")
+                    break
                 
                 if response.status_code == 200:
                     soup = BeautifulSoup(response.text, 'html.parser')
                     
-                    # Farklı Google selector'larını dene
-                    selectors = [
-                        'div.g a',  # Normal results
-                        'div.yuRUbf a',  # New layout
-                        'a[jsname="UWckNb"]',  # Alternative
-                        'div[data-sokoban-container] a'  # Another alternative
-                    ]
+                    # Multiple selector strategies
+                    found_in_page = 0
                     
-                    for selector in selectors:
-                        results = soup.select(selector)
-                        for link in results:
-                            href = link.get('href', '')
+                    # Strategy 1: Standard Google results
+                    for result in soup.select('div.g'):
+                        link_tag = result.select_one('a')
+                        if link_tag and link_tag.get('href'):
+                            href = link_tag['href']
                             if href.startswith('http') and '?' in href and 'google.com' not in href:
                                 if href not in urls:
                                     urls.append(href)
+                                    found_in_page += 1
                                     print(f"[+] Found: {href}")
                     
+                    # Strategy 2: Alternative layout
+                    if found_in_page == 0:
+                        for link in soup.select('a[href^="http"]'):
+                            href = link.get('href', '')
+                            if '?' in href and 'google.com' not in href and 'gstatic' not in href:
+                                if href not in urls:
+                                    urls.append(href)
+                                    found_in_page += 1
+                                    print(f"[+] Found: {href}")
+                    
+                    print(f"[*] Found {found_in_page} URLs on page {page + 1}")
+                    
+                    if found_in_page == 0 and page > 0:
+                        print("[*] No more results, stopping")
+                        break
+                    
                     # Rate limiting
-                    time.sleep(random.uniform(3, 6))
+                    time.sleep(random.uniform(4, 7))
                     
                     if len(urls) >= max_results:
                         break
-                else:
-                    print(f"[-] Error: Status code {response.status_code}")
-                    # CAPTCHA veya block durumunda
-                    if response.status_code == 429:
-                        print("[!] Rate limited by Google. Try again later.")
+                        
+            except Exception as e:
+                print(f"[-] Error on page {page + 1}: {e}")
+                continue
+        
+        print(f"[*] Total: {len(urls)} URLs from Google")
+        return urls[:max_results]
+
+
+class YandexDork(DorkEngine):
+    def __init__(self):
+        super().__init__()
+        self.base_url = "https://yandex.com/search/"
+    
+    def search(self, dork, max_results=50):
+        """
+        Search Yandex with dork - Enhanced
+        """
+        urls = []
+        num_pages = min((max_results // 10) + 1, 5)
+        
+        print(f"[*] Searching Yandex for: {dork}")
+        
+        for page in range(num_pages):
+            try:
+                params = {
+                    'text': dork,
+                    'p': page,
+                    'lr': 21  # Turkey region
+                }
+                
+                print(f"[*] Page {page + 1}/{num_pages}...")
+                
+                response = requests.get(
+                    self.base_url,
+                    params=params,
+                    headers=self.get_headers(),
+                    timeout=20
+                )
+                
+                print(f"[*] Response: {response.status_code}")
+                
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    found_in_page = 0
+                    
+                    # Yandex result selectors
+                    for result in soup.select('li.serp-item'):
+                        link = result.select_one('a.link, a.organic__url')
+                        if link and link.get('href'):
+                            href = link['href']
+                            if href.startswith('http') and '?' in href and 'yandex' not in href:
+                                if href not in urls:
+                                    urls.append(href)
+                                    found_in_page += 1
+                                    print(f"[+] Found: {href}")
+                    
+                    print(f"[*] Found {found_in_page} URLs on page {page + 1}")
+                    
+                    if found_in_page == 0:
+                        print("[*] No more results")
+                        break
+                    
+                    # Rate limiting
+                    time.sleep(random.uniform(4, 7))
+                    
+                    if len(urls) >= max_results:
                         break
                     
             except Exception as e:
-                print(f"[-] Error in Google search: {e}")
+                print(f"[-] Error on page {page + 1}: {e}")
                 continue
         
-        print(f"[*] Total URLs found: {len(urls)}")
+        print(f"[*] Total: {len(urls)} URLs from Yandex")
         return urls[:max_results]
 
 class YandexDork(DorkEngine):
