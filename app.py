@@ -202,8 +202,12 @@ def api_scan_status(scan_id):
 @app.route('/api/scan/stop/<scan_id>', methods=['POST'])
 @login_required
 def api_stop_scan(scan_id):
-    scanner_api.stop_scan(scan_id)
-    return jsonify({'status': 'stopped'})
+    try:
+        scanner_api.stop_scan(scan_id)
+        return jsonify({'status': 'stopped', 'success': True})
+    except Exception as e:
+        print(f"[!] Error stopping scan: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/stats')
 @login_required
