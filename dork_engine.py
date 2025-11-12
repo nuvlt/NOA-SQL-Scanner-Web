@@ -189,3 +189,22 @@ SQL_DORKS = [
     'inurl:".asp?id="',
     'inurl:".aspx?id="',
 ]
+
+# TR-specific SQL Dorks (en sona ekle)
+SQL_DORKS_TR = [
+    'site:.tr inurl:".php?id="',
+    'site:.tr inurl:"urun.php?id="',
+    'site:.tr inurl:"haber.php?id="',
+    'site:.tr inurl:"detay.php?id="',
+    'site:.tr inurl:"kategori.php?id="',
+    'site:.tr inurl:"sayfa.php?id="',
+    'site:.com.tr inurl:".php?id="',
+    'site:.com.tr inurl:"product.php?id="',
+    'site:.com.tr inurl:"news.php?id="',
+    'site:.com.tr inurl:"page.php?id="',
+    'site:.gov.tr inurl:".php?id="',
+    'site:.edu.tr inurl:".php?id="',
+]
+
+# Combine all dorks
+SQL_DORKS = SQL_DORKS + SQL_DORKS_TR
