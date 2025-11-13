@@ -11,7 +11,7 @@ import os
 from datetime import datetime, timedelta
 
 from auth import check_password, hash_password
-from dork_engine import GoogleDork, YandexDork, SQL_DORKS, DEMO_URLS
+from dork_engine_improved import GoogleDork, YandexDork, SQL_DORKS, DEMO_URLS
 from scanner_api import ScannerAPI
 from database import Database
 from config_web import Config
