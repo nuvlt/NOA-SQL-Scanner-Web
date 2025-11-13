@@ -18,16 +18,22 @@
                         <input type="text" class="form-control" id="dork_query" name="dork_query" 
                                placeholder='inurl:".php?id="' required>
                         <small class="form-text text-muted">
-                            Enter Google or Yandex dork query to find potential vulnerable URLs
+                            Enter dork query to find potential vulnerable URLs
                         </small>
                     </div>
                     
                     <div class="mb-3">
                         <label for="engine" class="form-label">Search Engine</label>
                         <select class="form-select" id="engine" name="engine">
-                            <option value="google">Google</option>
-                            <option value="yandex">Yandex</option>
+                            <option value="multi" selected>Multi-Engine (Recommended)</option>
+                            <option value="duckduckgo">DuckDuckGo Only</option>
+                            <option value="bing">Bing Only</option>
+                            <option value="google">Google (Limited)</option>
+                            <option value="yandex">Yandex (Limited)</option>
                         </select>
+                        <small class="form-text text-muted">
+                            Multi-engine tries DuckDuckGo, Bing, and API-based engines if configured
+                        </small>
                     </div>
                     
                     <div class="mb-3">
@@ -38,14 +44,47 @@
                     
                     <div class="alert alert-info" role="alert">
                         <i class="fas fa-info-circle"></i>
-                        <strong>Note:</strong> Dork searches may be rate-limited by search engines. 
-                        Results may take several minutes to complete.
+                        <strong>Tips:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Multi-Engine</strong> tries multiple sources for best results</li>
+                            <li><strong>DuckDuckGo</strong> has no rate limit but may return fewer results</li>
+                            <li><strong>API Keys</strong> (SerpAPI, Google CSE) provide most reliable results</li>
+                            <li>Configure API keys in <code>.env</code> file for best performance</li>
+                        </ul>
                     </div>
                     
                     <button type="submit" class="btn btn-success btn-lg w-100">
                         <i class="fas fa-search"></i> Search
                     </button>
                 </form>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-cog"></i> Optional: Configure API Keys</h5>
+            </div>
+            <div class="card-body">
+                <p>For best results, configure these API keys in your <code>.env</code> file:</p>
+                
+                <h6>1. SerpAPI (Recommended)</h6>
+                <ul>
+                    <li>Sign up: <a href="https://serpapi.com" target="_blank">serpapi.com</a></li>
+                    <li>Free tier: 100 searches/month</li>
+                    <li>Add to .env: <code>SERPAPI_KEY=your_key</code></li>
+                </ul>
+                
+                <h6>2. Google Custom Search (Alternative)</h6>
+                <ul>
+                    <li>Create CSE: <a href="https://programmablesearchengine.google.com/" target="_blank">Google CSE</a></li>
+                    <li>Get API key: <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud</a></li>
+                    <li>Free tier: 100 searches/day</li>
+                </ul>
+                
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Without API keys, the scanner uses free methods (DuckDuckGo, Bing) which may be rate-limited.
+                </div>
             </div>
         </div>
     </div>
@@ -73,18 +112,25 @@
                 <h5 class="mb-0"><i class="fas fa-book"></i> Dork Examples</h5>
             </div>
             <div class="card-body">
-                <h6>SQL Injection:</h6>
+                <h6>Turkish Sites:</h6>
                 <ul class="small">
-                    <li><code>inurl:".php?id="</code></li>
+                    <li><code>site:.tr inurl:".php?id="</code></li>
+                    <li><code>site:.com.tr inurl:"urun.php"</code></li>
+                    <li><code>site:.tr inurl:"haber.php?id="</code></li>
+                </ul>
+                
+                <h6>SQL Injection Targets:</h6>
+                <ul class="small">
+                    <li><code>inurl:".php?id=" intext:"mysql"</code></li>
                     <li><code>inurl:"product.php?id="</code></li>
                     <li><code>inurl:"news.php?id="</code></li>
                 </ul>
                 
-                <h6>By Extension:</h6>
+                <h6>By Technology:</h6>
                 <ul class="small">
-                    <li><code>inurl:".php?catid="</code></li>
-                    <li><code>inurl:".asp?id="</code></li>
-                    <li><code>inurl:".aspx?id="</code></li>
+                    <li><code>inurl:".asp?id="</code> (ASP)</li>
+                    <li><code>inurl:".aspx?id="</code> (ASP.NET)</li>
+                    <li><code>inurl:".jsp?id="</code> (Java)</li>
                 </ul>
             </div>
         </div>
