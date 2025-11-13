@@ -121,7 +121,7 @@ def scan_progress(scan_id):
 def dork_search():
     if request.method == 'POST':
         dork_query = request.form.get('dork_query')
-        search_engine = request.form.get('engine', 'google')
+        search_engine = request.form.get('engine', 'multi')
         max_results = int(request.form.get('max_results', 50))
         
         if max_results > Config.DORK_MAX_RESULTS:
@@ -131,76 +131,89 @@ def dork_search():
         errors = []
         
         try:
-            flash('Searching multiple sources... Please wait.', 'info')
+            # Import the new multi-engine
+            from dork_engine_improved import (
+                MultiEngineDork, DuckDuckGoHTMLDork, BingDork, 
+                DEMO_URLS
+            )
             
-            # Try primary engine
-            if search_engine == 'google':
+            # Option 1: Multi-engine (recommended)
+            if search_engine == 'multi':
+                flash('Using multi-engine search (DuckDuckGo + Bing)...', 'info')
+                
+                # Get API keys from environment if available
+                serpapi_key = os.environ.get('SERPAPI_KEY')
+                google_cse_key = os.environ.get('GOOGLE_CSE_KEY')
+                google_cx = os.environ.get('GOOGLE_CX')
+                
+                searcher = MultiEngineDork(
+                    serpapi_key=serpapi_key,
+                    google_cse_key=google_cse_key,
+                    google_cx=google_cx
+                )
+                all_urls = searcher.search(dork_query, max_results)
+            
+            # Option 2: DuckDuckGo only
+            elif search_engine == 'duckduckgo':
+                flash('Searching DuckDuckGo...', 'info')
+                ddg = DuckDuckGoHTMLDork()
+                all_urls = ddg.search(dork_query, max_results)
+            
+            # Option 3: Bing only
+            elif search_engine == 'bing':
+                flash('Searching Bing...', 'info')
+                bing = BingDork()
+                all_urls = bing.search(dork_query, max_results)
+            
+            # Option 4: Original engines (fallback)
+            else:
+                flash('Using original search engines...', 'info')
+                
+                # Try Google first
                 try:
-                    dork = GoogleDork()
-                    urls = dork.search(dork_query, max_results)
+                    from dork_engine import GoogleDork
+                    google = GoogleDork()
+                    urls = google.search(dork_query, max_results)
                     all_urls.extend(urls)
                     if urls:
                         flash(f'Google: Found {len(urls)} URLs', 'success')
-                    else:
-                        errors.append('Google: No results or rate limited')
                 except Exception as e:
                     errors.append(f'Google error: {str(e)}')
                 
-                # Try DuckDuckGo as backup
+                # Try Yandex
                 if len(all_urls) < 10:
                     try:
-                        flash('Trying DuckDuckGo...', 'info')
-                        from dork_engine import DuckDuckGoDork
-                        ddg = DuckDuckGoDork()
-                        ddg_urls = ddg.search(dork_query, max_results)
-                        all_urls.extend(ddg_urls)
-                        if ddg_urls:
-                            flash(f'DuckDuckGo: Found {len(ddg_urls)} URLs', 'success')
-                    except Exception as e:
-                        errors.append(f'DuckDuckGo error: {str(e)}')
-                
-                # Try Yandex as last resort
-                if len(all_urls) < 5:
-                    try:
-                        flash('Trying Yandex...', 'info')
+                        from dork_engine import YandexDork
                         yandex = YandexDork()
-                        yandex_urls = yandex.search(dork_query, max_results)
-                        all_urls.extend(yandex_urls)
-                        if yandex_urls:
-                            flash(f'Yandex: Found {len(yandex_urls)} URLs', 'success')
+                        urls = yandex.search(dork_query, max_results)
+                        all_urls.extend(urls)
+                        if urls:
+                            flash(f'Yandex: Found {len(urls)} URLs', 'success')
                     except Exception as e:
                         errors.append(f'Yandex error: {str(e)}')
-            
-            else:  # Yandex primary
-                try:
-                    dork = YandexDork()
-                    urls = dork.search(dork_query, max_results)
-                    all_urls.extend(urls)
-                    if urls:
-                        flash(f'Yandex: Found {len(urls)} URLs', 'success')
-                except Exception as e:
-                    errors.append(f'Yandex error: {str(e)}')
             
             # Remove duplicates
             all_urls = list(set(all_urls))
             
-            # Show errors
+            # Show results or demo URLs
+            if all_urls:
+                flash(f'Found {len(all_urls)} unique URLs!', 'success')
+                
+                # Save to database
+                dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
+            else:
+                flash('No results found. Showing demo vulnerable URLs for testing.', 'warning')
+                all_urls = DEMO_URLS
+            
+            # Show any errors
             if errors:
                 for error in errors:
                     flash(error, 'warning')
             
-            # If no results, use demo URLs
-            if not all_urls:
-                flash('No results found from any source. Showing demo vulnerable URLs.', 'warning')
-                from dork_engine import DEMO_URLS
-                all_urls = DEMO_URLS
-            
-            # Save to database
-            if all_urls:
-                dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
-                flash(f'Total: Found {len(all_urls)} unique URLs!', 'success')
-            
-            return render_template('dork_results.html', urls=all_urls, dork_query=dork_query, errors=errors)
+            return render_template('dork_results.html', 
+                                 urls=all_urls, 
+                                 dork_query=dork_query, 
+                                 errors=errors)
         
         except Exception as e:
             flash(f'Error during search: {str(e)}', 'danger')
