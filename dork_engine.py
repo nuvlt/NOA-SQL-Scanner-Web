@@ -1,6 +1,6 @@
 """
-NOA SQL Scanner Web - Dork Search Engine (Enhanced)
-Google & Yandex integration with fallbacks
+NOA SQL Scanner - Enhanced Dork Engine
+Multiple fallback strategies for reliable results
 """
 
 import requests
@@ -23,315 +23,337 @@ class DorkEngine:
     def get_headers(self):
         return {
             'User-Agent': random.choice(self.user_agents),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9,tr;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0',
-            'Referer': 'https://www.google.com/'
         }
 
-class GoogleDork(DorkEngine):
-    def __init__(self):
+
+class GoogleCSE(DorkEngine):
+    """Google Custom Search Engine - Daha güvenilir"""
+    def __init__(self, api_key=None, cx=None):
         super().__init__()
-        self.base_url = "https://www.google.com/search"
+        self.api_key = api_key
+        self.cx = cx  # Custom Search Engine ID
+        self.base_url = "https://www.googleapis.com/customsearch/v1"
     
-    def search(self, dork, max_results=50):
-        """
-        Search Google with dork - Enhanced with better parsing
-        """
-        urls = []
-        num_pages = min((max_results // 10) + 1, 5)
+    def search(self, query, max_results=50):
+        """Google CSE API kullanarak arama"""
+        if not self.api_key or not self.cx:
+            print("[!] Google CSE API key/CX not configured")
+            return []
         
-        print(f"[*] Searching Google for: {dork}")
+        urls = []
+        num_pages = min((max_results // 10) + 1, 10)
+        
+        print(f"[*] Searching via Google CSE: {query}")
         
         for page in range(num_pages):
             try:
                 params = {
-                    'q': dork,
-                    'start': page * 10,
-                    'num': 10,
-                    'hl': 'en',
-                    'filter': 0,
-                    'safe': 'off'
+                    'key': self.api_key,
+                    'cx': self.cx,
+                    'q': query,
+                    'start': page * 10 + 1,
+                    'num': 10
                 }
                 
-                print(f"[*] Page {page + 1}/{num_pages}...")
+                response = requests.get(self.base_url, params=params, timeout=10)
                 
-                response = self.session.get(
-                    self.base_url,
-                    params=params,
-                    headers=self.get_headers(),
-                    timeout=20,
-                    allow_redirects=True
-                )
-                
-                print(f"[*] Response: {response.status_code}")
-                
-                if response.status_code == 429:
-                    print(f"[!] Rate limited by Google")
+                if response.status_code == 200:
+                    data = response.json()
+                    items = data.get('items', [])
+                    
+                    for item in items:
+                        url = item.get('link')
+                        if url and self._is_valid_url(url):
+                            urls.append(url)
+                            print(f"[+] Found: {url}")
+                    
+                    if not items:
+                        break
+                    
+                    time.sleep(1)
+                else:
+                    print(f"[!] API Error: {response.status_code}")
                     break
-                
-                if response.status_code == 200:
-                    # Extract all URLs from the page
-                    found_urls = self._extract_urls_from_google(response.text)
                     
-                    for url in found_urls:
-                        if url not in urls:
-                            urls.append(url)
-                            print(f"[+] Found: {url}")
-                    
-                    print(f"[*] Found {len(found_urls)} URLs on page {page + 1}")
-                    
-                    if len(found_urls) == 0 and page > 0:
-                        print("[*] No more results")
-                        break
-                    
-                    # Rate limiting
-                    time.sleep(random.uniform(5, 8))
-                    
-                    if len(urls) >= max_results:
-                        break
-                        
             except Exception as e:
-                print(f"[-] Error on page {page + 1}: {e}")
-                continue
+                print(f"[-] Error: {e}")
+                break
         
-        print(f"[*] Total: {len(urls)} URLs from Google")
+        print(f"[*] Total: {len(urls)} URLs from Google CSE")
         return urls[:max_results]
     
-    def _extract_urls_from_google(self, html):
-        """Extract URLs from Google search results"""
-        urls = []
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Multiple extraction strategies
-        
-        # Strategy 1: Standard result divs
-        for div in soup.find_all('div', {'class': 'g'}):
-            link = div.find('a', href=True)
-            if link:
-                href = link['href']
-                if self._is_valid_url(href):
-                    urls.append(href)
-        
-        # Strategy 2: All links with /url?q=
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            if '/url?q=' in href:
-                # Extract actual URL from Google redirect
-                actual_url = href.split('/url?q=')[1].split('&')[0]
-                if self._is_valid_url(actual_url):
-                    urls.append(actual_url)
-        
-        # Strategy 3: Direct http/https links
-        for link in soup.find_all('a', href=re.compile(r'^https?://')):
-            href = link['href']
-            if self._is_valid_url(href):
-                urls.append(href)
-        
-        return list(set(urls))
-    
     def _is_valid_url(self, url):
-        """Check if URL is valid for testing"""
         if not url.startswith('http'):
             return False
-        
-        # Exclude Google/Yandex/common sites
-        exclude = ['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 
-                   'instagram.com', 'linkedin.com', 'yandex', 'gstatic']
-        
+        exclude = ['google.com', 'youtube.com', 'facebook.com']
         for domain in exclude:
             if domain in url.lower():
                 return False
-        
-        # Must have query parameters
-        if '?' not in url:
-            return False
-        
-        return True
+        return '?' in url
 
 
-class YandexDork(DorkEngine):
-    def __init__(self):
-        super().__init__()
-        self.base_url = "https://yandex.com/search/"
-    
-    def search(self, dork, max_results=50):
-        """
-        Search Yandex with dork - Enhanced
-        """
-        urls = []
-        num_pages = min((max_results // 10) + 1, 5)
-        
-        print(f"[*] Searching Yandex for: {dork}")
-        
-        for page in range(num_pages):
-            try:
-                params = {
-                    'text': dork,
-                    'p': page,
-                    'lr': 11508  # Turkey
-                }
-                
-                print(f"[*] Page {page + 1}/{num_pages}...")
-                
-                response = self.session.get(
-                    self.base_url,
-                    params=params,
-                    headers=self.get_headers(),
-                    timeout=20
-                )
-                
-                print(f"[*] Response: {response.status_code}")
-                
-                if response.status_code == 200:
-                    found_urls = self._extract_urls_from_yandex(response.text)
-                    
-                    for url in found_urls:
-                        if url not in urls:
-                            urls.append(url)
-                            print(f"[+] Found: {url}")
-                    
-                    print(f"[*] Found {len(found_urls)} URLs on page {page + 1}")
-                    
-                    if len(found_urls) == 0:
-                        print("[*] No more results")
-                        break
-                    
-                    # Rate limiting
-                    time.sleep(random.uniform(4, 7))
-                    
-                    if len(urls) >= max_results:
-                        break
-                    
-            except Exception as e:
-                print(f"[-] Error on page {page + 1}: {e}")
-                continue
-        
-        print(f"[*] Total: {len(urls)} URLs from Yandex")
-        return urls[:max_results]
-    
-    def _extract_urls_from_yandex(self, html):
-        """Extract URLs from Yandex search results"""
-        urls = []
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Multiple extraction strategies
-        
-        # Strategy 1: Organic results
-        for item in soup.find_all('li', {'class': re.compile(r'serp-item')}):
-            link = item.find('a', {'class': re.compile(r'Link.*organic')})
-            if not link:
-                link = item.find('a', href=re.compile(r'^https?://'))
-            
-            if link and link.get('href'):
-                href = link['href']
-                if self._is_valid_url(href):
-                    urls.append(href)
-        
-        # Strategy 2: All external links
-        for link in soup.find_all('a', href=re.compile(r'^https?://')):
-            href = link['href']
-            if self._is_valid_url(href):
-                urls.append(href)
-        
-        return list(set(urls))
-    
-    def _is_valid_url(self, url):
-        """Check if URL is valid for testing"""
-        if not url.startswith('http'):
-            return False
-        
-        # Exclude common sites
-        exclude = ['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 
-                   'instagram.com', 'linkedin.com', 'yandex', 'gstatic']
-        
-        for domain in exclude:
-            if domain in url.lower():
-                return False
-        
-        # Must have query parameters
-        if '?' not in url:
-            return False
-        
-        return True
-
-
-# Alternative: DuckDuckGo (no rate limiting!)
-class DuckDuckGoDork(DorkEngine):
+class DuckDuckGoHTMLDork(DorkEngine):
+    """DuckDuckGo HTML - Rate limit yok!"""
     def __init__(self):
         super().__init__()
         self.base_url = "https://html.duckduckgo.com/html/"
     
-    def search(self, dork, max_results=50):
-        """
-        Search DuckDuckGo - No rate limiting!
-        """
+    def search(self, query, max_results=50):
         urls = []
-        num_pages = min((max_results // 30) + 1, 5)
         
-        print(f"[*] Searching DuckDuckGo for: {dork}")
+        print(f"[*] Searching DuckDuckGo HTML: {query}")
+        
+        try:
+            # DuckDuckGo HTML POST request
+            data = {
+                'q': query,
+                'b': '',
+                'kl': 'wt-wt'
+            }
+            
+            response = self.session.post(
+                self.base_url,
+                data=data,
+                headers=self.get_headers(),
+                timeout=15
+            )
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # DuckDuckGo HTML result extraction
+                for result in soup.find_all('a', {'class': 'result__a'}):
+                    href = result.get('href')
+                    if href and self._is_valid_url(href):
+                        urls.append(href)
+                        print(f"[+] Found: {href}")
+                
+                # Alternative: Extract from result snippets
+                if not urls:
+                    for result in soup.find_all('div', {'class': 'result'}):
+                        link = result.find('a', href=True)
+                        if link:
+                            href = link['href']
+                            if self._is_valid_url(href):
+                                urls.append(href)
+                                print(f"[+] Found: {href}")
+                
+                print(f"[*] Found {len(urls)} URLs from DuckDuckGo")
+            else:
+                print(f"[!] HTTP {response.status_code}")
+                
+        except Exception as e:
+            print(f"[-] DuckDuckGo error: {e}")
+        
+        return urls[:max_results]
+    
+    def _is_valid_url(self, url):
+        if not url.startswith('http'):
+            return False
+        exclude = ['duckduckgo', 'google.com', 'youtube.com']
+        for domain in exclude:
+            if domain in url.lower():
+                return False
+        return '?' in url
+
+
+class BingDork(DorkEngine):
+    """Bing Search - Genellikle daha az sıkı"""
+    def __init__(self):
+        super().__init__()
+        self.base_url = "https://www.bing.com/search"
+    
+    def search(self, query, max_results=50):
+        urls = []
+        num_pages = min((max_results // 10) + 1, 5)
+        
+        print(f"[*] Searching Bing: {query}")
         
         for page in range(num_pages):
             try:
-                data = {
-                    'q': dork,
-                    's': page * 30,
-                    'dc': page * 30,
-                    'v': 'l',
-                    'o': 'json',
-                    'api': '/d.js'
+                params = {
+                    'q': query,
+                    'first': page * 10 + 1,
+                    'FORM': 'PERE'
                 }
                 
-                print(f"[*] Page {page + 1}/{num_pages}...")
+                headers = self.get_headers()
+                headers['Referer'] = 'https://www.bing.com/'
                 
-                response = self.session.post(
+                response = self.session.get(
                     self.base_url,
-                    data=data,
-                    headers=self.get_headers(),
-                    timeout=20
+                    params=params,
+                    headers=headers,
+                    timeout=15
                 )
-                
-                print(f"[*] Response: {response.status_code}")
                 
                 if response.status_code == 200:
                     soup = BeautifulSoup(response.text, 'html.parser')
                     
-                    # Extract links
-                    found_urls = []
-                    for result in soup.find_all('a', {'class': 'result__url'}):
-                        href = result.get('href')
-                        if href and href.startswith('http') and '?' in href:
-                            if 'duckduckgo' not in href and href not in urls:
+                    # Bing result extraction
+                    for result in soup.find_all('li', {'class': 'b_algo'}):
+                        link = result.find('a', href=True)
+                        if link:
+                            href = link['href']
+                            if self._is_valid_url(href):
                                 urls.append(href)
-                                found_urls.append(href)
                                 print(f"[+] Found: {href}")
                     
-                    print(f"[*] Found {len(found_urls)} URLs on page {page + 1}")
-                    
-                    if len(found_urls) == 0:
+                    if not urls:
                         break
                     
-                    time.sleep(random.uniform(2, 4))
-                    
-                    if len(urls) >= max_results:
-                        break
+                    time.sleep(random.uniform(3, 6))
+                else:
+                    print(f"[!] HTTP {response.status_code}")
+                    break
                     
             except Exception as e:
-                print(f"[-] Error on page {page + 1}: {e}")
-                continue
+                print(f"[-] Bing error: {e}")
+                break
         
-        print(f"[*] Total: {len(urls)} URLs from DuckDuckGo")
+        print(f"[*] Total: {len(urls)} URLs from Bing")
         return urls[:max_results]
+    
+    def _is_valid_url(self, url):
+        if not url.startswith('http'):
+            return False
+        exclude = ['bing.com', 'microsoft.com', 'youtube.com']
+        for domain in exclude:
+            if domain in url.lower():
+                return False
+        return '?' in url
 
 
-# Demo URLs - Guaranteed vulnerable sites for testing
+class SerpAPIDork(DorkEngine):
+    """SerpAPI - En güvenilir (ücretli ama free tier var)"""
+    def __init__(self, api_key=None):
+        super().__init__()
+        self.api_key = api_key
+        self.base_url = "https://serpapi.com/search"
+    
+    def search(self, query, max_results=50):
+        if not self.api_key:
+            print("[!] SerpAPI key not configured")
+            return []
+        
+        urls = []
+        num_pages = min((max_results // 10) + 1, 10)
+        
+        print(f"[*] Searching via SerpAPI: {query}")
+        
+        for page in range(num_pages):
+            try:
+                params = {
+                    'api_key': self.api_key,
+                    'engine': 'google',
+                    'q': query,
+                    'start': page * 10,
+                    'num': 10
+                }
+                
+                response = requests.get(self.base_url, params=params, timeout=15)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    results = data.get('organic_results', [])
+                    
+                    for result in results:
+                        url = result.get('link')
+                        if url and self._is_valid_url(url):
+                            urls.append(url)
+                            print(f"[+] Found: {url}")
+                    
+                    if not results:
+                        break
+                    
+                    time.sleep(1)
+                else:
+                    print(f"[!] SerpAPI Error: {response.status_code}")
+                    break
+                    
+            except Exception as e:
+                print(f"[-] Error: {e}")
+                break
+        
+        print(f"[*] Total: {len(urls)} URLs from SerpAPI")
+        return urls[:max_results]
+    
+    def _is_valid_url(self, url):
+        if not url.startswith('http'):
+            return False
+        exclude = ['google.com', 'youtube.com']
+        for domain in exclude:
+            if domain in url.lower():
+                return False
+        return '?' in url
+
+
+# Multi-engine orchestrator
+class MultiEngineDork:
+    """Tüm engine'leri deneyip en iyi sonucu döner"""
+    def __init__(self, serpapi_key=None, google_cse_key=None, google_cx=None):
+        self.engines = []
+        
+        # Öncelik sırasına göre ekle
+        if serpapi_key:
+            self.engines.append(('SerpAPI', SerpAPIDork(serpapi_key)))
+        
+        if google_cse_key and google_cx:
+            self.engines.append(('GoogleCSE', GoogleCSE(google_cse_key, google_cx)))
+        
+        # Free engines
+        self.engines.append(('DuckDuckGo', DuckDuckGoHTMLDork()))
+        self.engines.append(('Bing', BingDork()))
+    
+    def search(self, query, max_results=50):
+        all_urls = []
+        
+        print(f"\n[*] Multi-engine search for: {query}")
+        print(f"[*] Will try {len(self.engines)} search engines\n")
+        
+        for name, engine in self.engines:
+            print(f"\n{'='*60}")
+            print(f"[*] Trying: {name}")
+            print(f"{'='*60}")
+            
+            try:
+                urls = engine.search(query, max_results)
+                
+                if urls:
+                    all_urls.extend(urls)
+                    print(f"[+] {name}: Found {len(urls)} URLs")
+                    
+                    # If we got enough results, stop
+                    if len(all_urls) >= max_results:
+                        print(f"[*] Reached target of {max_results} URLs")
+                        break
+                else:
+                    print(f"[-] {name}: No results")
+                    
+            except Exception as e:
+                print(f"[-] {name} failed: {e}")
+                continue
+            
+            # Small delay between engines
+            time.sleep(2)
+        
+        # Remove duplicates
+        all_urls = list(set(all_urls))
+        
+        print(f"\n{'='*60}")
+        print(f"[+] TOTAL UNIQUE URLs: {len(all_urls)}")
+        print(f"{'='*60}\n")
+        
+        return all_urls[:max_results]
+
+
+# Demo URLs - Always available as fallback
 DEMO_URLS = [
     'http://testphp.vulnweb.com/artists.php?artist=1',
     'http://testphp.vulnweb.com/listproducts.php?cat=1',
@@ -340,37 +362,14 @@ DEMO_URLS = [
     'http://testaspnet.vulnweb.com/showthread.aspx?id=1',
 ]
 
-# Enhanced Turkish dorks
-SQL_DORKS_TR = [
+# Predefined dorks
+SQL_DORKS = [
     'site:.tr inurl:".php?id="',
     'site:.tr inurl:"urun.php?id="',
     'site:.tr inurl:"haber.php?id="',
-    'site:.tr inurl:"detay.php?id="',
-    'site:.tr inurl:"kategori.php?id="',
-    'site:.tr inurl:"sayfa.php?id="',
     'site:.com.tr inurl:".php?id="',
-    'site:.com.tr inurl:"product.php?id="',
-    'site:.com.tr inurl:"news.php?id="',
-    'site:.com.tr inurl:"page.php?id="',
-    'site:.gov.tr inurl:".php?id="',
-    'site:.edu.tr inurl:".php?id="',
-    'site:.tr inurl:"index.php?id="',
-    'site:.tr inurl:"gallery.php?id="',
-    'site:.tr inurl:"ilan.php?id="',
-]
-
-# Global dorks
-SQL_DORKS_GLOBAL = [
-    'inurl:".php?id=" intext:"mysql_"',
-    'inurl:".php?catid=" intext:"error"',
+    'inurl:".php?id=" intext:"mysql"',
     'inurl:"product.php?id="',
     'inurl:"news.php?id="',
-    'inurl:"item.php?id="',
     'inurl:"page.php?id="',
-    'inurl:"gallery.php?id="',
-    'inurl:"index.php?id="',
-    'inurl:".asp?id="',
-    'inurl:".aspx?id="',
 ]
-
-SQL_DORKS = SQL_DORKS_TR + SQL_DORKS_GLOBAL
