@@ -12,3 +12,7 @@ gunicorn==21.2.0
 gevent==23.9.1
 gevent-websocket==0.10.1
 tldextract>=3.4.0
+
+# Additional for improved dork engine
+html5lib==1.1
+soupsieve==2.5
