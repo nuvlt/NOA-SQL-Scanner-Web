@@ -1,6 +1,6 @@
 """
 NOA SQL Scanner Web Edition
-Production-ready Flask Application
+Production-ready Flask Application with Debug Tools
 """
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
@@ -11,7 +11,7 @@ import os
 from datetime import datetime, timedelta
 
 from auth import check_password, hash_password
-from dork_engine_improved import MultiEngineDork, SQL_DORKS, DEMO_URLS
+from dork_engine import GoogleDork, YandexDork, SQL_DORKS, DEMO_URLS
 from scanner_api import ScannerAPI
 from database import Database
 from config_web import Config
@@ -131,64 +131,55 @@ def dork_search():
         errors = []
         
         try:
-            # Import the new multi-engine
-            from dork_engine_improved import (
-                MultiEngineDork, DuckDuckGoHTMLDork, BingDork, 
-                DEMO_URLS
-            )
-            
-            # Option 1: Multi-engine (recommended)
-            if search_engine == 'multi':
-                flash('Using multi-engine search (DuckDuckGo + Bing)...', 'info')
-                
-                # Get API keys from environment if available
-                serpapi_key = os.environ.get('SERPAPI_KEY')
-                google_cse_key = os.environ.get('GOOGLE_CSE_KEY')
-                google_cx = os.environ.get('GOOGLE_CX')
-                
-                searcher = MultiEngineDork(
-                    serpapi_key=serpapi_key,
-                    google_cse_key=google_cse_key,
-                    google_cx=google_cx
+            # Try to import improved engine
+            try:
+                from dork_engine_improved import (
+                    MultiEngineDork, DuckDuckGoAPIDork, BraveDork, 
+                    StartpageDork, PublicAPISearcher, DEMO_URLS as DEMO_IMPROVED
                 )
-                all_urls = searcher.search(dork_query, max_results)
-            
-            # Option 2: DuckDuckGo only
-            elif search_engine == 'duckduckgo':
-                flash('Searching DuckDuckGo...', 'info')
-                ddg = DuckDuckGoHTMLDork()
-                all_urls = ddg.search(dork_query, max_results)
-            
-            # Option 3: Bing only
-            elif search_engine == 'bing':
-                flash('Searching Bing...', 'info')
-                bing = BingDork()
-                all_urls = bing.search(dork_query, max_results)
-            
-            # Option 4: Original engines (fallback)
-            else:
-                flash('Using original search engines...', 'info')
+                flash('Using improved multi-engine search...', 'info')
                 
-                # Try Google first
-                try:
-                    from dork_engine import GoogleDork
-                    google = GoogleDork()
-                    urls = google.search(dork_query, max_results)
-                    all_urls.extend(urls)
-                    if urls:
-                        flash(f'Google: Found {len(urls)} URLs', 'success')
-                except Exception as e:
-                    errors.append(f'Google error: {str(e)}')
+                # Multi-engine search
+                if search_engine == 'multi':
+                    serpapi_key = os.environ.get('SERPAPI_KEY')
+                    searcher = MultiEngineDork(serpapi_key=serpapi_key)
+                    all_urls = searcher.search(dork_query, max_results)
+                    
+                # Single engines
+                elif search_engine == 'duckduckgo':
+                    ddg = DuckDuckGoAPIDork()
+                    all_urls = ddg.search(dork_query, max_results)
+                elif search_engine == 'brave':
+                    brave = BraveDork()
+                    all_urls = brave.search(dork_query, max_results)
+                elif search_engine == 'wayback':
+                    import re
+                    domain_match = re.search(r'site:([^\s]+)', dork_query)
+                    if domain_match:
+                        domain = domain_match.group(1)
+                        wayback = PublicAPISearcher()
+                        all_urls = wayback.search_wayback(f'*.{domain}/*', max_results)
+                    else:
+                        flash('For Wayback, use site: syntax (e.g., site:.tr)', 'warning')
                 
-                # Try Yandex
-                if len(all_urls) < 10:
+            except ImportError as e:
+                print(f"[!] Could not import improved engine: {e}")
+                flash('Using fallback search engines...', 'warning')
+                
+                # Fallback to original engines
+                if search_engine == 'google':
                     try:
-                        from dork_engine import YandexDork
-                        yandex = YandexDork()
-                        urls = yandex.search(dork_query, max_results)
+                        dork = GoogleDork()
+                        urls = dork.search(dork_query, max_results)
                         all_urls.extend(urls)
-                        if urls:
-                            flash(f'Yandex: Found {len(urls)} URLs', 'success')
+                    except Exception as e:
+                        errors.append(f'Google error: {str(e)}')
+                
+                elif search_engine == 'yandex':
+                    try:
+                        dork = YandexDork()
+                        urls = dork.search(dork_query, max_results)
+                        all_urls.extend(urls)
                     except Exception as e:
                         errors.append(f'Yandex error: {str(e)}')
             
@@ -198,8 +189,6 @@ def dork_search():
             # Show results or demo URLs
             if all_urls:
                 flash(f'Found {len(all_urls)} unique URLs!', 'success')
-                
-                # Save to database
                 dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
             else:
                 flash('No results found. Showing demo vulnerable URLs for testing.', 'warning')
@@ -281,53 +270,92 @@ def api_stats():
     stats = db.get_statistics()
     return jsonify(stats)
 
-# WebSocket events
-@socketio.on('connect')
-def handle_connect():
-    if 'authenticated' not in session:
-        return False
-    emit('connected', {'message': 'Connected to NOA Scanner'})
+# ============================================================================
+# DEBUG ENDPOINTS - Test search engines and connectivity
+# ============================================================================
 
-@socketio.on('subscribe_scan')
-def handle_subscribe(data):
-    scan_id = data.get('scan_id')
-    join_room(f'scan_{scan_id}')
-    emit('subscribed', {'scan_id': scan_id})
+@app.route('/debug/simple-test')
+@login_required
+def debug_simple_test():
+    """Simplest possible test - raw HTML output"""
+    import requests
+    
+    results = []
+    results.append("="*70)
+    results.append("NOA SQL Scanner - Simple Connectivity Test")
+    results.append("="*70)
+    
+    # Test 1: Basic connectivity
+    results.append("\n=== Test 1: Basic Connectivity ===")
+    test_sites = [
+        ('Google', 'https://www.google.com'),
+        ('DuckDuckGo', 'https://duckduckgo.com'),
+        ('DuckDuckGo API', 'https://api.duckduckgo.com/'),
+        ('Wayback Machine', 'http://web.archive.org'),
+    ]
+    
+    for name, url in test_sites:
+        try:
+            r = requests.get(url, timeout=10)
+            results.append(f"✓ {name}: HTTP {r.status_code}")
+        except Exception as e:
+            results.append(f"✗ {name}: {str(e)}")
+    
+    # Test 2: Wayback Machine API
+    results.append("\n=== Test 2: Wayback Machine API ===")
+    try:
+        r = requests.get(
+            'http://web.archive.org/cdx/search/cdx',
+            params={
+                'url': '*.github.com/*',
+                'limit': 5,
+                'output': 'json'
+            },
+            timeout=30
+        )
+        results.append(f"✓ Wayback API: HTTP {r.status_code}")
+        if r.status_code == 200:
+            data = r.json()
+            results.append(f"  Results count: {len(data)} items")
+            if len(data) > 1:
+                results.append(f"  Sample URL: {data[1][0] if isinstance(data[1], list) else 'N/A'}")
+    except Exception as e:
+        results.append(f"✗ Wayback API: {str(e)}")
+    
+    # Test 3: Module imports
+    results.append("\n=== Test 3: Module Imports ===")
+    try:
+        from dork_engine_improved import MultiEngineDork, DEMO_URLS
+        results.append("✓ dork_engine_improved imported successfully")
+        results.append(f"  Demo URLs available: {len(DEMO_URLS)}")
+    except ImportError as e:
+        results.append(f"✗ Import failed: {str(e)}")
+        results.append("  FIX: Make sure dork_engine_improved.py is deployed")
+    
+    # Test 4: File system check
+    results.append("\n=== Test 4: File System Check ===")
+    try:
+        files = os.listdir('.')
+        if 'dork_engine_improved.py' in files:
+            results.append("✓ dork_engine_improved.py exists")
+        else:
+            results.append("✗ dork_engine_improved.py NOT FOUND")
+            results.append(f"  Files in directory: {', '.join([f for f in files if f.endswith('.py')])}")
+    except Exception as e:
+        results.append(f"✗ File system error: {str(e)}")
+    
+    results.append("\n" + "="*70)
+    results.append("Test Complete")
+    results.append("="*70)
+    
+    # Return as plain HTML
+    return '<html><head><title>Simple Test</title></head><body><pre style="font-family: monospace; background: #1e1e1e; color: #00ff00; padding: 20px;">' + '\n'.join(results) + '</pre></body></html>'
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    pass
-
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return render_template('404.html'), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return render_template('500.html'), 500
-
-# Health check endpoint for deployment platforms
-@app.route('/health')
-def health():
-    return jsonify({'status': 'healthy', 'version': '1.9.0.3'}), 200
-
-# For local development only
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
 
 @app.route('/debug/test-search')
 @login_required
 def debug_test_search():
-    """Debug endpoint to test search engines"""
-    import sys
-    from io import StringIO
-    
-    # Capture output
-    old_stdout = sys.stdout
-    sys.stdout = StringIO()
-    
+    """Full search engine test with detailed results"""
     results = {
         'engines_tested': [],
         'working_engines': [],
@@ -362,7 +390,7 @@ def debug_test_search():
                 results['logs'].append(f'✓ DuckDuckGo API: Found {len(urls)} URLs')
             else:
                 results['failed_engines'].append('DuckDuckGo API')
-                results['logs'].append('✗ DuckDuckGo API: No results')
+                results['logs'].append('✗ DuckDuckGo API: No results (normal for specific queries)')
                 
             results['engines_tested'].append('DuckDuckGo API')
         except Exception as e:
@@ -381,14 +409,14 @@ def debug_test_search():
                 results['logs'].append(f'✓ Brave: Found {len(urls)} URLs')
             else:
                 results['failed_engines'].append('Brave')
-                results['logs'].append('✗ Brave: No results')
+                results['logs'].append('✗ Brave: No results (might be blocked/CAPTCHA)')
                 
             results['engines_tested'].append('Brave')
         except Exception as e:
             results['failed_engines'].append('Brave')
             results['logs'].append(f'✗ Brave Error: {str(e)}')
         
-        # Test 3: Wayback Machine
+        # Test 3: Wayback Machine (Most reliable!)
         results['logs'].append('\n=== Testing Wayback Machine ===')
         try:
             wayback = PublicAPISearcher()
@@ -400,7 +428,7 @@ def debug_test_search():
                 results['logs'].append(f'✓ Wayback: Found {len(urls)} URLs')
             else:
                 results['failed_engines'].append('Wayback Machine')
-                results['logs'].append('✗ Wayback: No results')
+                results['logs'].append('✗ Wayback: No archived URLs for this pattern')
                 
             results['engines_tested'].append('Wayback Machine')
         except Exception as e:
@@ -433,13 +461,6 @@ def debug_test_search():
         results['logs'].append(f'✗ Fatal Error: {str(e)}')
         import traceback
         results['logs'].append(traceback.format_exc())
-    
-    # Restore stdout
-    output = sys.stdout.getvalue()
-    sys.stdout = old_stdout
-    
-    if output:
-        results['console_output'] = output
     
     return render_template('debug_search.html', results=results)
 
@@ -503,64 +524,42 @@ def debug_test_wayback_turkish():
     
     return render_template('debug_wayback.html', results=results)
 
+# ============================================================================
+# END DEBUG ENDPOINTS
+# ============================================================================
 
-@app.route('/debug/simple-test')
-@login_required
-def debug_simple_test():
-    """Simplest possible test"""
-    import requests
-    
-    results = []
-    
-    # Test 1: Basic connectivity
-    results.append("=== Test 1: Basic Connectivity ===")
-    try:
-        r = requests.get('https://www.google.com', timeout=10)
-        results.append(f"✓ Google: {r.status_code}")
-    except Exception as e:
-        results.append(f"✗ Google: {e}")
-    
-    try:
-        r = requests.get('https://api.duckduckgo.com/', timeout=10)
-        results.append(f"✓ DuckDuckGo API: {r.status_code}")
-    except Exception as e:
-        results.append(f"✗ DuckDuckGo API: {e}")
-    
-    # Test 2: Wayback Machine
-    results.append("\n=== Test 2: Wayback Machine ===")
-    try:
-        r = requests.get(
-            'http://web.archive.org/cdx/search/cdx',
-            params={
-                'url': '*.github.com/*',
-                'limit': 5,
-                'output': 'json'
-            },
-            timeout=30
-        )
-        results.append(f"✓ Wayback: {r.status_code}")
-        if r.status_code == 200:
-            data = r.json()
-            results.append(f"  Results: {len(data)} items")
-    except Exception as e:
-        results.append(f"✗ Wayback: {e}")
-    
-    # Test 3: Import test
-    results.append("\n=== Test 3: Module Import ===")
-    try:
-        from dork_engine_improved import MultiEngineDork
-        results.append("✓ dork_engine_improved imported successfully")
-    except ImportError as e:
-        results.append(f"✗ Import failed: {e}")
-    
-    # Test 4: Demo URLs
-    results.append("\n=== Test 4: Demo URLs ===")
-    try:
-        from dork_engine_improved import DEMO_URLS
-        results.append(f"✓ Demo URLs available: {len(DEMO_URLS)}")
-        for url in DEMO_URLS[:3]:
-            results.append(f"  - {url}")
-    except Exception as e:
-        results.append(f"✗ Demo URLs error: {e}")
-    
-    return '<html><body><pre>' + '\n'.join(results) + '</pre></body></html>'
+# WebSocket events
+@socketio.on('connect')
+def handle_connect():
+    if 'authenticated' not in session:
+        return False
+    emit('connected', {'message': 'Connected to NOA Scanner'})
+
+@socketio.on('subscribe_scan')
+def handle_subscribe(data):
+    scan_id = data.get('scan_id')
+    join_room(f'scan_{scan_id}')
+    emit('subscribed', {'scan_id': scan_id})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    pass
+
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return render_template('500.html'), 500
+
+# Health check endpoint
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy', 'version': '1.9.0.3'}), 200
+
+# For local development only
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
