@@ -316,3 +316,251 @@ def health():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
+
+@app.route('/debug/test-search')
+@login_required
+def debug_test_search():
+    """Debug endpoint to test search engines"""
+    import sys
+    from io import StringIO
+    
+    # Capture output
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+    
+    results = {
+        'engines_tested': [],
+        'working_engines': [],
+        'failed_engines': [],
+        'sample_results': {},
+        'logs': []
+    }
+    
+    try:
+        from dork_engine_improved import (
+            DuckDuckGoAPIDork,
+            BraveDork,
+            StartpageDork,
+            PublicAPISearcher,
+            MultiEngineDork
+        )
+        
+        results['logs'].append('✓ Successfully imported dork_engine_improved')
+        
+        # Test query
+        test_query = 'site:.edu inurl:".php?id="'
+        
+        # Test 1: DuckDuckGo API
+        results['logs'].append('\n=== Testing DuckDuckGo API ===')
+        try:
+            ddg = DuckDuckGoAPIDork()
+            urls = ddg.search(test_query, max_results=10)
+            
+            if urls:
+                results['working_engines'].append('DuckDuckGo API')
+                results['sample_results']['DuckDuckGo API'] = urls[:3]
+                results['logs'].append(f'✓ DuckDuckGo API: Found {len(urls)} URLs')
+            else:
+                results['failed_engines'].append('DuckDuckGo API')
+                results['logs'].append('✗ DuckDuckGo API: No results')
+                
+            results['engines_tested'].append('DuckDuckGo API')
+        except Exception as e:
+            results['failed_engines'].append('DuckDuckGo API')
+            results['logs'].append(f'✗ DuckDuckGo API Error: {str(e)}')
+        
+        # Test 2: Brave Search
+        results['logs'].append('\n=== Testing Brave Search ===')
+        try:
+            brave = BraveDork()
+            urls = brave.search(test_query, max_results=10)
+            
+            if urls:
+                results['working_engines'].append('Brave')
+                results['sample_results']['Brave'] = urls[:3]
+                results['logs'].append(f'✓ Brave: Found {len(urls)} URLs')
+            else:
+                results['failed_engines'].append('Brave')
+                results['logs'].append('✗ Brave: No results')
+                
+            results['engines_tested'].append('Brave')
+        except Exception as e:
+            results['failed_engines'].append('Brave')
+            results['logs'].append(f'✗ Brave Error: {str(e)}')
+        
+        # Test 3: Wayback Machine
+        results['logs'].append('\n=== Testing Wayback Machine ===')
+        try:
+            wayback = PublicAPISearcher()
+            urls = wayback.search_wayback('*.edu.tr/*id=*', max_results=20)
+            
+            if urls:
+                results['working_engines'].append('Wayback Machine')
+                results['sample_results']['Wayback Machine'] = urls[:3]
+                results['logs'].append(f'✓ Wayback: Found {len(urls)} URLs')
+            else:
+                results['failed_engines'].append('Wayback Machine')
+                results['logs'].append('✗ Wayback: No results')
+                
+            results['engines_tested'].append('Wayback Machine')
+        except Exception as e:
+            results['failed_engines'].append('Wayback Machine')
+            results['logs'].append(f'✗ Wayback Error: {str(e)}')
+        
+        # Test 4: Multi-Engine
+        results['logs'].append('\n=== Testing Multi-Engine ===')
+        try:
+            multi = MultiEngineDork()
+            urls = multi.search(test_query, max_results=20)
+            
+            if urls:
+                results['working_engines'].append('Multi-Engine')
+                results['sample_results']['Multi-Engine'] = urls[:5]
+                results['logs'].append(f'✓ Multi-Engine: Found {len(urls)} total URLs')
+            else:
+                results['failed_engines'].append('Multi-Engine')
+                results['logs'].append('✗ Multi-Engine: No results from any source')
+                
+            results['engines_tested'].append('Multi-Engine')
+        except Exception as e:
+            results['failed_engines'].append('Multi-Engine')
+            results['logs'].append(f'✗ Multi-Engine Error: {str(e)}')
+        
+    except ImportError as e:
+        results['logs'].append(f'✗ Import Error: {str(e)}')
+        results['logs'].append('Make sure dork_engine_improved.py is deployed')
+    except Exception as e:
+        results['logs'].append(f'✗ Fatal Error: {str(e)}')
+        import traceback
+        results['logs'].append(traceback.format_exc())
+    
+    # Restore stdout
+    output = sys.stdout.getvalue()
+    sys.stdout = old_stdout
+    
+    if output:
+        results['console_output'] = output
+    
+    return render_template('debug_search.html', results=results)
+
+
+@app.route('/debug/test-wayback-turkish')
+@login_required
+def debug_test_wayback_turkish():
+    """Test Wayback Machine specifically for Turkish sites"""
+    results = {
+        'tested_domains': [],
+        'successful_domains': [],
+        'total_urls_found': 0,
+        'sample_urls': [],
+        'logs': []
+    }
+    
+    try:
+        from dork_engine_improved import PublicAPISearcher
+        
+        wayback = PublicAPISearcher()
+        
+        # Test different Turkish domains
+        turkish_domains = [
+            ('*.edu.tr/*id=*', 'Turkish Educational'),
+            ('*.gov.tr/*id=*', 'Turkish Government'),
+            ('*.com.tr/*php?id=*', 'Turkish Commercial'),
+            ('*.tr/*haber.php*', 'Turkish News Sites'),
+        ]
+        
+        for pattern, description in turkish_domains:
+            results['logs'].append(f'\nTesting: {description}')
+            results['logs'].append(f'Pattern: {pattern}')
+            results['tested_domains'].append(description)
+            
+            try:
+                urls = wayback.search_wayback(pattern, max_results=15)
+                
+                if urls:
+                    results['successful_domains'].append(description)
+                    results['total_urls_found'] += len(urls)
+                    results['sample_urls'].extend(urls[:3])
+                    results['logs'].append(f'✓ Found {len(urls)} archived URLs')
+                else:
+                    results['logs'].append('✗ No archived URLs found')
+                    
+            except Exception as e:
+                results['logs'].append(f'✗ Error: {str(e)}')
+        
+        # Summary
+        results['logs'].append('\n=== SUMMARY ===')
+        results['logs'].append(f'Tested: {len(results["tested_domains"])} domain patterns')
+        results['logs'].append(f'Successful: {len(results["successful_domains"])} patterns')
+        results['logs'].append(f'Total URLs: {results["total_urls_found"]}')
+        
+    except ImportError as e:
+        results['logs'].append(f'✗ Import Error: {str(e)}')
+    except Exception as e:
+        results['logs'].append(f'✗ Fatal Error: {str(e)}')
+        import traceback
+        results['logs'].append(traceback.format_exc())
+    
+    return render_template('debug_wayback.html', results=results)
+
+
+@app.route('/debug/simple-test')
+@login_required
+def debug_simple_test():
+    """Simplest possible test"""
+    import requests
+    
+    results = []
+    
+    # Test 1: Basic connectivity
+    results.append("=== Test 1: Basic Connectivity ===")
+    try:
+        r = requests.get('https://www.google.com', timeout=10)
+        results.append(f"✓ Google: {r.status_code}")
+    except Exception as e:
+        results.append(f"✗ Google: {e}")
+    
+    try:
+        r = requests.get('https://api.duckduckgo.com/', timeout=10)
+        results.append(f"✓ DuckDuckGo API: {r.status_code}")
+    except Exception as e:
+        results.append(f"✗ DuckDuckGo API: {e}")
+    
+    # Test 2: Wayback Machine
+    results.append("\n=== Test 2: Wayback Machine ===")
+    try:
+        r = requests.get(
+            'http://web.archive.org/cdx/search/cdx',
+            params={
+                'url': '*.github.com/*',
+                'limit': 5,
+                'output': 'json'
+            },
+            timeout=30
+        )
+        results.append(f"✓ Wayback: {r.status_code}")
+        if r.status_code == 200:
+            data = r.json()
+            results.append(f"  Results: {len(data)} items")
+    except Exception as e:
+        results.append(f"✗ Wayback: {e}")
+    
+    # Test 3: Import test
+    results.append("\n=== Test 3: Module Import ===")
+    try:
+        from dork_engine_improved import MultiEngineDork
+        results.append("✓ dork_engine_improved imported successfully")
+    except ImportError as e:
+        results.append(f"✗ Import failed: {e}")
+    
+    # Test 4: Demo URLs
+    results.append("\n=== Test 4: Demo URLs ===")
+    try:
+        from dork_engine_improved import DEMO_URLS
+        results.append(f"✓ Demo URLs available: {len(DEMO_URLS)}")
+        for url in DEMO_URLS[:3]:
+            results.append(f"  - {url}")
+    except Exception as e:
+        results.append(f"✗ Demo URLs error: {e}")
+    
+    return '<html><body><pre>' + '\n'.join(results) + '</pre></body></html>'
