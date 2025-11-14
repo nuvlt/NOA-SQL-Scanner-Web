@@ -46,6 +46,26 @@
                             <i class="fas fa-file-alt"></i> Reports
                         </a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="debugDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-bug"></i> Debug
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="debugDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('debug_simple_test') }}">
+                                <i class="fas fa-vial"></i> Simple Test
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('debug_test_search') }}">
+                                <i class="fas fa-search"></i> Search Engines Test
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('debug_test_wayback_turkish') }}">
+                                <i class="fas fa-flag"></i> Wayback Test (Turkish)
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('health') }}" target="_blank">
+                                <i class="fas fa-heartbeat"></i> Health Check
+                            </a></li>
+                        </ul>
+                    </li>
                 </ul>
                 <ul class="navbar-nav">
                     <li class="nav-item">
