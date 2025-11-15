@@ -351,6 +351,89 @@ def debug_simple_test():
     # Return as plain HTML
     return '<html><head><title>Simple Test</title></head><body><pre style="font-family: monospace; background: #1e1e1e; color: #00ff00; padding: 20px;">' + '\n'.join(results) + '</pre></body></html>'
 
+# app.py'ye bu endpoint'i ekleyin (diğer debug endpoint'lerden sonra)
+
+@app.route('/debug/wayback-direct')
+@login_required
+def debug_wayback_direct():
+    """Direct Wayback Machine test without templates"""
+    import requests
+    
+    results = []
+    results.append("="*70)
+    results.append("Wayback Machine Direct Test")
+    results.append("="*70)
+    
+    # Test different patterns
+    test_patterns = [
+        ('*.edu.tr/*id=*', 'Turkish Educational'),
+        ('*.gov.tr/*id=*', 'Turkish Government'),
+        ('*.com.tr/*php?id=*', 'Turkish Commercial'),
+        ('*.github.com/*', 'GitHub (General Test)'),
+        ('*.stackoverflow.com/*', 'StackOverflow (General Test)'),
+    ]
+    
+    total_found = 0
+    
+    for pattern, description in test_patterns:
+        results.append(f"\n=== Testing: {description} ===")
+        results.append(f"Pattern: {pattern}")
+        
+        try:
+            url = "http://web.archive.org/cdx/search/cdx"
+            params = {
+                'url': pattern,
+                'matchType': 'domain',
+                'output': 'json',
+                'fl': 'original',
+                'collapse': 'urlkey',
+                'limit': 20
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            results.append(f"HTTP Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                count = len(data) - 1  # Minus header
+                
+                if count > 0:
+                    results.append(f"✓ Found {count} archived URLs")
+                    total_found += count
+                    
+                    # Show first 3 URLs
+                    results.append("\nSample URLs:")
+                    for item in data[1:4]:  # Skip header, show 3
+                        if isinstance(item, list) and len(item) > 0:
+                            url_found = item[0]
+                            # Filter for URLs with query parameters
+                            if '?' in url_found and 'id=' in url_found:
+                                results.append(f"  → {url_found}")
+                else:
+                    results.append("✗ No archived URLs found")
+            else:
+                results.append(f"✗ Request failed with status {response.status_code}")
+                
+        except Exception as e:
+            results.append(f"✗ Error: {str(e)}")
+    
+    results.append("\n" + "="*70)
+    results.append(f"SUMMARY: Found {total_found} total archived URLs")
+    results.append("="*70)
+    
+    if total_found > 0:
+        results.append("\n✓ SUCCESS: Wayback Machine is working!")
+        results.append("You can use these archived URLs for SQL injection testing.")
+    else:
+        results.append("\n✗ PROBLEM: No URLs found from any pattern")
+        results.append("This might mean:")
+        results.append("  1. Turkish domains not well archived")
+        results.append("  2. Wayback API temporarily down")
+        results.append("  3. Need to try different patterns")
+    
+    results.append("\nNext step: Try a dork search with 'wayback' engine")
+    
+    return '<html><head><title>Wayback Direct Test</title></head><body><pre style="font-family: monospace; background: #1e1e1e; color: #00ff00; padding: 20px; white-space: pre-wrap;">' + '\n'.join(results) + '</pre></body></html>'
 
 @app.route('/debug/test-search')
 @login_required
