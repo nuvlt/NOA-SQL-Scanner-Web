@@ -116,14 +116,13 @@ def scan_progress(scan_id):
         return redirect(url_for('dashboard'))
     return render_template('scan_progress.html', scan_id=scan_id, scan_info=scan_info)
 
-# app.py'deki /dork route'unu bu versiyonla değiştirin
-
 @app.route('/dork', methods=['GET', 'POST'])
 @login_required
 def dork_search():
+    """Dork Search - Wayback Machine focused"""
     if request.method == 'POST':
         dork_query = request.form.get('dork_query')
-        search_engine = request.form.get('engine', 'wayback')  # Default to Wayback!
+        search_engine = request.form.get('engine', 'wayback')
         max_results = int(request.form.get('max_results', 50))
         
         if max_results > Config.DORK_MAX_RESULTS:
@@ -133,118 +132,123 @@ def dork_search():
         errors = []
         
         try:
-            # PRIORITY 1: Wayback Machine (most reliable!)
+            # Wayback Machine search
             if search_engine == 'wayback' or search_engine == 'multi':
-                flash('Searching Wayback Machine (Internet Archive)...', 'info')
+                flash('Searching Wayback Machine...', 'info')
                 
-                try:
-                    import requests
-                    import re
+                import requests
+                import re
+                
+                # Extract domain from dork query
+                domain_match = re.search(r'site:([^\s]+)', dork_query)
+                
+                if domain_match:
+                    domain = domain_match.group(1).strip()
                     
-                    # Extract domain from dork query
-                    domain_match = re.search(r'site:([^\s]+)', dork_query)
+                    # Extract inurl pattern if exists
+                    inurl_match = re.search(r'inurl:"([^"]+)"', dork_query)
+                    inurl_pattern = inurl_match.group(1) if inurl_match else None
                     
-                    if domain_match:
-                        domain = domain_match.group(1).strip()
-                        
-                        # Build Wayback patterns
+                    # Build Wayback patterns
+                    if inurl_pattern:
                         patterns = [
-                            f'*.{domain}/*id=*',
-                            f'*.{domain}/*php?*',
+                            f'*.{domain}/*{inurl_pattern}*',
+                            f'*.{domain}/*.php?id=*',
                             f'*.{domain}/*?id=*',
                         ]
-                        
-                        for pattern in patterns:
-                            try:
-                                url = "http://web.archive.org/cdx/search/cdx"
-                                params = {
-                                    'url': pattern,
-                                    'matchType': 'domain',
-                                    'output': 'json',
-                                    'fl': 'original',
-                                    'collapse': 'urlkey',
-                                    'limit': max_results
-                                }
-                                
-                                response = requests.get(url, params=params, timeout=30)
-                                
-                                if response.status_code == 200:
-                                    data = response.json()
-                                    
-                                    for item in data[1:]:  # Skip header
-                                        if isinstance(item, list) and len(item) > 0:
-                                            found_url = item[0]
-                                            
-                                            # Filter for URLs with parameters
-                                            if '?' in found_url and found_url.startswith('http'):
-                                                all_urls.append(found_url)
-                                
-                                print(f"[+] Wayback pattern {pattern}: Found {len(data)-1} URLs")
-                                
-                            except Exception as e:
-                                print(f"[-] Wayback pattern {pattern} error: {e}")
-                                continue
-                        
-                        if all_urls:
-                            flash(f'Wayback Machine: Found {len(all_urls)} archived URLs!', 'success')
-                        else:
-                            errors.append('Wayback: No archived URLs found for this domain')
-                    
                     else:
-                        flash('For Wayback, use site: syntax (e.g., site:.tr or site:.edu.tr)', 'warning')
-                        errors.append('Invalid query format for Wayback search')
+                        patterns = [
+                            f'*.{domain}/*.php?*',
+                            f'*.{domain}/*?id=*',
+                            f'*.{domain}/*',
+                        ]
+                    
+                    wayback_found = 0
+                    
+                    for pattern in patterns:
+                        try:
+                            url = "http://web.archive.org/cdx/search/cdx"
+                            params = {
+                                'url': pattern,
+                                'matchType': 'domain',
+                                'output': 'json',
+                                'fl': 'original',
+                                'collapse': 'urlkey',
+                                'limit': max_results
+                            }
+                            
+                            response = requests.get(url, params=params, timeout=30)
+                            
+                            if response.status_code == 200:
+                                data = response.json()
+                                
+                                # Skip header (first item)
+                                for item in data[1:]:
+                                    if isinstance(item, list) and len(item) > 0:
+                                        found_url = item[0]
+                                        
+                                        # Accept ANY http URL
+                                        if found_url.startswith('http'):
+                                            all_urls.append(found_url)
+                                            wayback_found += 1
+                                
+                                print(f"[+] Wayback pattern '{pattern}': Found {len(data)-1} URLs")
+                            
+                        except Exception as e:
+                            print(f"[-] Wayback pattern error: {e}")
+                            continue
+                    
+                    if wayback_found > 0:
+                        flash(f'Wayback Machine: Found {wayback_found} archived URLs!', 'success')
+                    else:
+                        errors.append(f'Wayback: No archived URLs for {domain}')
+                        flash('Wayback found no results. Try a broader domain (e.g., site:.tr)', 'warning')
                 
-                except Exception as e:
-                    errors.append(f'Wayback error: {str(e)}')
-                    print(f"[!] Wayback error: {e}")
+                else:
+                    flash('Please use site: syntax (e.g., site:.tr or site:.com.tr)', 'warning')
+                    errors.append('Missing site: in query')
             
-            # PRIORITY 2: Try improved engines (if available)
-            if len(all_urls) < 10 and search_engine == 'multi':
+            # Try other engines if multi and we have few results
+            if len(all_urls) < 5 and search_engine == 'multi':
                 try:
-                    from dork_engine_improved import DuckDuckGoAPIDork, MultiEngineDork
+                    from dork_engine_improved import DuckDuckGoAPIDork
                     
-                    flash('Trying additional search engines...', 'info')
+                    flash('Trying DuckDuckGo as backup...', 'info')
+                    ddg = DuckDuckGoAPIDork()
+                    urls = ddg.search(dork_query, 20)
                     
-                    # Try DuckDuckGo API
-                    try:
-                        ddg = DuckDuckGoAPIDork()
-                        urls = ddg.search(dork_query, max_results=20)
-                        if urls:
-                            all_urls.extend(urls)
-                            flash(f'DuckDuckGo: Found {len(urls)} URLs', 'success')
-                    except Exception as e:
-                        errors.append(f'DuckDuckGo: {str(e)}')
-                    
-                except ImportError:
-                    errors.append('Advanced search engines not available')
+                    if urls:
+                        all_urls.extend(urls)
+                        flash(f'DuckDuckGo: Found {len(urls)} URLs', 'success')
+                        
+                except Exception as e:
+                    errors.append(f'DuckDuckGo: {str(e)}')
             
             # Remove duplicates
             all_urls = list(set(all_urls))
             
-            # If no results, use demo URLs
+            # Show results or demo
             if not all_urls:
-                flash('No results found. Showing demo vulnerable URLs for testing.', 'warning')
+                flash('No results from any source. Showing demo vulnerable URLs.', 'warning')
                 
-                # Try to import DEMO_URLS
+                # Get demo URLs
                 try:
-                    from dork_engine_improved import DEMO_URLS as DEMO_IMPROVED
-                    all_urls = DEMO_IMPROVED
+                    from dork_engine_improved import DEMO_URLS as IMPROVED_DEMO
+                    all_urls = IMPROVED_DEMO
                 except ImportError:
-                    from dork_engine import DEMO_URLS
                     all_urls = DEMO_URLS
             else:
-                flash(f'Total: Found {len(all_urls)} unique URLs!', 'success')
+                flash(f'Success! Found {len(all_urls)} unique URLs', 'success')
                 
                 # Save to database
                 try:
                     dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
                 except Exception as e:
-                    print(f"[!] Database save error: {e}")
+                    print(f"[!] DB save error: {e}")
             
-            # Show any errors
-            if errors:
-                for error in errors:
-                    flash(error, 'warning')
+            # Show errors
+            for error in errors:
+                flash(error, 'warning')
             
             return render_template('dork_results.html', 
                                  urls=all_urls, 
@@ -252,13 +256,12 @@ def dork_search():
                                  errors=errors)
         
         except Exception as e:
-            flash(f'Error during search: {str(e)}', 'danger')
+            flash(f'Search error: {str(e)}', 'danger')
             print(f"[!] Dork search error: {e}")
             import traceback
             traceback.print_exc()
             
-            # Return demo URLs as fallback
-            from dork_engine import DEMO_URLS
+            # Fallback to demo
             return render_template('dork_results.html', 
                                  urls=DEMO_URLS, 
                                  dork_query=dork_query, 
@@ -324,13 +327,13 @@ def api_stats():
     return jsonify(stats)
 
 # ============================================================================
-# DEBUG ENDPOINTS - Test search engines and connectivity
+# DEBUG ENDPOINTS
 # ============================================================================
 
 @app.route('/debug/simple-test')
 @login_required
 def debug_simple_test():
-    """Simplest possible test - raw HTML output"""
+    """Simplest possible test"""
     import requests
     
     results = []
@@ -342,7 +345,6 @@ def debug_simple_test():
     results.append("\n=== Test 1: Basic Connectivity ===")
     test_sites = [
         ('Google', 'https://www.google.com'),
-        ('DuckDuckGo', 'https://duckduckgo.com'),
         ('DuckDuckGo API', 'https://api.duckduckgo.com/'),
         ('Wayback Machine', 'http://web.archive.org'),
     ]
@@ -354,62 +356,39 @@ def debug_simple_test():
         except Exception as e:
             results.append(f"✗ {name}: {str(e)}")
     
-    # Test 2: Wayback Machine API
+    # Test 2: Wayback API
     results.append("\n=== Test 2: Wayback Machine API ===")
     try:
         r = requests.get(
             'http://web.archive.org/cdx/search/cdx',
-            params={
-                'url': '*.github.com/*',
-                'limit': 5,
-                'output': 'json'
-            },
+            params={'url': '*.github.com/*', 'limit': 5, 'output': 'json'},
             timeout=30
         )
         results.append(f"✓ Wayback API: HTTP {r.status_code}")
         if r.status_code == 200:
             data = r.json()
-            results.append(f"  Results count: {len(data)} items")
-            if len(data) > 1:
-                results.append(f"  Sample URL: {data[1][0] if isinstance(data[1], list) else 'N/A'}")
+            results.append(f"  Results: {len(data)} items")
     except Exception as e:
         results.append(f"✗ Wayback API: {str(e)}")
     
     # Test 3: Module imports
     results.append("\n=== Test 3: Module Imports ===")
     try:
-        from dork_engine_improved import MultiEngineDork, DEMO_URLS
-        results.append("✓ dork_engine_improved imported successfully")
-        results.append(f"  Demo URLs available: {len(DEMO_URLS)}")
+        from dork_engine_improved import DEMO_URLS
+        results.append("✓ dork_engine_improved imported")
+        results.append(f"  Demo URLs: {len(DEMO_URLS)}")
     except ImportError as e:
         results.append(f"✗ Import failed: {str(e)}")
-        results.append("  FIX: Make sure dork_engine_improved.py is deployed")
-    
-    # Test 4: File system check
-    results.append("\n=== Test 4: File System Check ===")
-    try:
-        files = os.listdir('.')
-        if 'dork_engine_improved.py' in files:
-            results.append("✓ dork_engine_improved.py exists")
-        else:
-            results.append("✗ dork_engine_improved.py NOT FOUND")
-            results.append(f"  Files in directory: {', '.join([f for f in files if f.endswith('.py')])}")
-    except Exception as e:
-        results.append(f"✗ File system error: {str(e)}")
     
     results.append("\n" + "="*70)
-    results.append("Test Complete")
-    results.append("="*70)
     
-    # Return as plain HTML
-    return '<html><head><title>Simple Test</title></head><body><pre style="font-family: monospace; background: #1e1e1e; color: #00ff00; padding: 20px;">' + '\n'.join(results) + '</pre></body></html>'
+    return '<html><head><title>Simple Test</title></head><body><pre style="font-family:monospace;background:#1e1e1e;color:#00ff00;padding:20px;">' + '\n'.join(results) + '</pre></body></html>'
 
-# app.py'deki debug/wayback-direct endpoint'ini BU ile değiştirin
 
 @app.route('/debug/wayback-direct')
 @login_required
 def debug_wayback_direct():
-    """Direct Wayback Machine test without templates"""
+    """Direct Wayback Machine test"""
     import requests
     
     results = []
@@ -417,249 +396,69 @@ def debug_wayback_direct():
     results.append("Wayback Machine Direct Test")
     results.append("="*70)
     
-    # Test different patterns
     test_patterns = [
-        ('*.edu.tr/*id=*', 'Turkish Educational'),
-        ('*.gov.tr/*id=*', 'Turkish Government'),
-        ('*.com.tr/*php?id=*', 'Turkish Commercial'),
-        ('*.org.tr/*?id=*', 'Turkish Organizations'),
-        ('*.github.com/*', 'GitHub (General Test)'),
+        ('*.com.tr/*', 'Turkish Commercial'),
+        ('*.org.tr/*', 'Turkish Organizations'),
+        ('*.github.com/*', 'GitHub'),
     ]
     
     total_found = 0
-    all_sample_urls = []
+    all_urls = []
     
     for pattern, description in test_patterns:
-        results.append(f"\n=== Testing: {description} ===")
+        results.append(f"\n=== {description} ===")
         results.append(f"Pattern: {pattern}")
         
         try:
-            url = "http://web.archive.org/cdx/search/cdx"
-            params = {
-                'url': pattern,
-                'matchType': 'domain',
-                'output': 'json',
-                'fl': 'original',
-                'collapse': 'urlkey',
-                'limit': 20
-            }
+            r = requests.get(
+                'http://web.archive.org/cdx/search/cdx',
+                params={
+                    'url': pattern,
+                    'matchType': 'domain',
+                    'output': 'json',
+                    'fl': 'original',
+                    'limit': 10
+                },
+                timeout=30
+            )
             
-            response = requests.get(url, params=params, timeout=30)
-            results.append(f"HTTP Status: {response.status_code}")
+            results.append(f"HTTP: {r.status_code}")
             
-            if response.status_code == 200:
-                data = response.json()
-                count = len(data) - 1 if len(data) > 0 else 0  # Minus header
+            if r.status_code == 200:
+                data = r.json()
+                count = len(data) - 1
                 
                 if count > 0:
-                    results.append(f"✓ Found {count} archived URLs")
+                    results.append(f"✓ Found {count} URLs\n")
                     total_found += count
                     
-                    # Show ALL URLs (not just with id=)
-                    results.append("\nSample URLs:")
-                    shown = 0
-                    for item in data[1:6]:  # Skip header, show up to 5
-                        if isinstance(item, list) and len(item) > 0:
-                            url_found = item[0]
-                            results.append(f"  → {url_found}")
-                            all_sample_urls.append(url_found)
-                            shown += 1
-                    
-                    if shown == 0:
-                        results.append("  (URLs found but not displayed - check data format)")
+                    for item in data[1:6]:
+                        if isinstance(item, list) and item:
+                            url = item[0]
+                            results.append(f"  → {url}")
+                            all_urls.append(url)
                 else:
-                    results.append("✗ No archived URLs found")
-            else:
-                results.append(f"✗ Request failed with status {response.status_code}")
-                
+                    results.append("✗ No URLs")
         except Exception as e:
-            results.append(f"✗ Error: {str(e)}")
+            results.append(f"✗ Error: {e}")
     
-    results.append("\n" + "="*70)
-    results.append(f"SUMMARY: Found {total_found} total archived URLs")
-    results.append("="*70)
-    
-    if all_sample_urls:
-        results.append("\n📋 ALL FOUND URLs:")
-        for url in all_sample_urls:
-            results.append(f"  {url}")
+    results.append(f"\n{'='*70}")
+    results.append(f"TOTAL: {total_found} URLs found")
+    results.append(f"{'='*70}")
     
     if total_found > 0:
-        results.append("\n✓ SUCCESS: Wayback Machine is working!")
-        results.append("These URLs can be tested for SQL injection.")
-        results.append("\nNext: Go to Dork Search and try:")
-        results.append("  Query: site:.com.tr inurl:\"php\"")
+        results.append("\n✓ SUCCESS! Wayback is working.")
+        results.append("\nGo to Dork Search and try:")
+        results.append("  Query: site:.com.tr")
         results.append("  Engine: Wayback Machine")
-    else:
-        results.append("\n⚠ ISSUE: Wayback API working but Turkish domains poorly archived")
-        results.append("\nSolutions:")
-        results.append("  1. Try broader patterns (site:.tr without inurl)")
-        results.append("  2. Use demo vulnerable URLs")
-        results.append("  3. Add SERPAPI_KEY for live search")
     
-    return '<html><head><title>Wayback Direct Test</title><style>body{font-family:monospace;background:#1e1e1e;color:#00ff00;padding:20px;}pre{white-space:pre-wrap;}</style></head><body><pre>' + '\n'.join(results) + '</pre></body></html>'
+    return '<html><head><title>Wayback Test</title><style>body{font-family:monospace;background:#1e1e1e;color:#00ff00;padding:20px;}pre{white-space:pre-wrap;}</style></head><body><pre>' + '\n'.join(results) + '</pre></body></html>'
 
 
-# AYRIYETEN: /dork route'undaki Wayback kısmını da düzeltin
-# Bu kısım daha önemli çünkü asıl kullanılan fonksiyon bu
-
-@app.route('/dork', methods=['GET', 'POST'])
-@login_required
-def dork_search():
-    if request.method == 'POST':
-        dork_query = request.form.get('dork_query')
-        search_engine = request.form.get('engine', 'wayback')
-        max_results = int(request.form.get('max_results', 50))
-        
-        if max_results > Config.DORK_MAX_RESULTS:
-            max_results = Config.DORK_MAX_RESULTS
-        
-        all_urls = []
-        errors = []
-        
-        try:
-            # Wayback Machine search
-            if search_engine == 'wayback' or search_engine == 'multi':
-                flash('Searching Wayback Machine...', 'info')
-                
-                import requests
-                import re
-                
-                # Extract domain from dork query
-                domain_match = re.search(r'site:([^\s]+)', dork_query)
-                
-                if domain_match:
-                    domain = domain_match.group(1).strip()
-                    
-                    # Extract inurl pattern if exists
-                    inurl_match = re.search(r'inurl:"([^"]+)"', dork_query)
-                    inurl_pattern = inurl_match.group(1) if inurl_match else None
-                    
-                    # Build Wayback patterns - TRY MULTIPLE!
-                    if inurl_pattern:
-                        patterns = [
-                            f'*.{domain}/*{inurl_pattern}*',
-                            f'*.{domain}/*.php?id=*',
-                            f'*.{domain}/*?id=*',
-                        ]
-                    else:
-                        patterns = [
-                            f'*.{domain}/*.php?*',
-                            f'*.{domain}/*?id=*',
-                            f'*.{domain}/*',
-                        ]
-                    
-                    wayback_found = 0
-                    
-                    for pattern in patterns:
-                        try:
-                            url = "http://web.archive.org/cdx/search/cdx"
-                            params = {
-                                'url': pattern,
-                                'matchType': 'domain',
-                                'output': 'json',
-                                'fl': 'original',
-                                'collapse': 'urlkey',
-                                'limit': max_results
-                            }
-                            
-                            response = requests.get(url, params=params, timeout=30)
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                
-                                # Skip header (first item)
-                                for item in data[1:]:
-                                    if isinstance(item, list) and len(item) > 0:
-                                        found_url = item[0]
-                                        
-                                        # Accept ANY http URL
-                                        if found_url.startswith('http'):
-                                            all_urls.append(found_url)
-                                            wayback_found += 1
-                                
-                                print(f"[+] Wayback pattern '{pattern}': Found {len(data)-1} URLs")
-                            
-                        except Exception as e:
-                            print(f"[-] Wayback pattern error: {e}")
-                            continue
-                    
-                    if wayback_found > 0:
-                        flash(f'Wayback Machine: Found {wayback_found} archived URLs!', 'success')
-                    else:
-                        errors.append(f'Wayback: No archived URLs for {domain}')
-                        flash('Wayback found no results. Try a broader domain (e.g., site:.tr instead of site:.edu.tr)', 'warning')
-                
-                else:
-                    flash('Please use site: syntax (e.g., site:.tr or site:.com.tr)', 'warning')
-                    errors.append('Missing site: in query')
-            
-            # Try other engines if multi and we have few results
-            if len(all_urls) < 5 and search_engine == 'multi':
-                try:
-                    from dork_engine_improved import DuckDuckGoAPIDork
-                    
-                    flash('Trying DuckDuckGo as backup...', 'info')
-                    ddg = DuckDuckGoAPIDork()
-                    urls = ddg.search(dork_query, 20)
-                    
-                    if urls:
-                        all_urls.extend(urls)
-                        flash(f'DuckDuckGo: Found {len(urls)} URLs', 'success')
-                        
-                except Exception as e:
-                    errors.append(f'DuckDuckGo: {str(e)}')
-            
-            # Remove duplicates
-            all_urls = list(set(all_urls))
-            
-            # Show results or demo
-            if not all_urls:
-                flash('No results from any source. Showing demo vulnerable URLs.', 'warning')
-                
-                # Get demo URLs
-                try:
-                    from dork_engine_improved import DEMO_URLS as IMPROVED_DEMO
-                    all_urls = IMPROVED_DEMO
-                except ImportError:
-                    from dork_engine import DEMO_URLS
-                    all_urls = DEMO_URLS
-            else:
-                flash(f'Success! Found {len(all_urls)} unique URLs', 'success')
-                
-                # Save to database
-                try:
-                    dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
-                except Exception as e:
-                    print(f"[!] DB save error: {e}")
-            
-            # Show errors
-            for error in errors:
-                flash(error, 'warning')
-            
-            return render_template('dork_results.html', 
-                                 urls=all_urls, 
-                                 dork_query=dork_query, 
-                                 errors=errors)
-        
-        except Exception as e:
-            flash(f'Search error: {str(e)}', 'danger')
-            print(f"[!] Dork search error: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            # Fallback to demo
-            from dork_engine import DEMO_URLS
-            return render_template('dork_results.html', 
-                                 urls=DEMO_URLS, 
-                                 dork_query=dork_query, 
-                                 errors=[str(e)])
-    
-    return render_template('dork.html', predefined_dorks=SQL_DORKS)
 @app.route('/debug/test-search')
 @login_required
 def debug_test_search():
-    """Full search engine test with detailed results"""
+    """Search engine test with template"""
     results = {
         'engines_tested': [],
         'working_engines': [],
@@ -669,102 +468,31 @@ def debug_test_search():
     }
     
     try:
-        from dork_engine_improved import (
-            DuckDuckGoAPIDork,
-            BraveDork,
-            StartpageDork,
-            PublicAPISearcher,
-            MultiEngineDork
-        )
+        from dork_engine_improved import DuckDuckGoAPIDork, PublicAPISearcher
         
-        results['logs'].append('✓ Successfully imported dork_engine_improved')
+        results['logs'].append('✓ Imported dork_engine_improved')
         
-        # Test query
-        test_query = 'site:.edu inurl:".php?id="'
-        
-        # Test 1: DuckDuckGo API
-        results['logs'].append('\n=== Testing DuckDuckGo API ===')
-        try:
-            ddg = DuckDuckGoAPIDork()
-            urls = ddg.search(test_query, max_results=10)
-            
-            if urls:
-                results['working_engines'].append('DuckDuckGo API')
-                results['sample_results']['DuckDuckGo API'] = urls[:3]
-                results['logs'].append(f'✓ DuckDuckGo API: Found {len(urls)} URLs')
-            else:
-                results['failed_engines'].append('DuckDuckGo API')
-                results['logs'].append('✗ DuckDuckGo API: No results (normal for specific queries)')
-                
-            results['engines_tested'].append('DuckDuckGo API')
-        except Exception as e:
-            results['failed_engines'].append('DuckDuckGo API')
-            results['logs'].append(f'✗ DuckDuckGo API Error: {str(e)}')
-        
-        # Test 2: Brave Search
-        results['logs'].append('\n=== Testing Brave Search ===')
-        try:
-            brave = BraveDork()
-            urls = brave.search(test_query, max_results=10)
-            
-            if urls:
-                results['working_engines'].append('Brave')
-                results['sample_results']['Brave'] = urls[:3]
-                results['logs'].append(f'✓ Brave: Found {len(urls)} URLs')
-            else:
-                results['failed_engines'].append('Brave')
-                results['logs'].append('✗ Brave: No results (might be blocked/CAPTCHA)')
-                
-            results['engines_tested'].append('Brave')
-        except Exception as e:
-            results['failed_engines'].append('Brave')
-            results['logs'].append(f'✗ Brave Error: {str(e)}')
-        
-        # Test 3: Wayback Machine (Most reliable!)
-        results['logs'].append('\n=== Testing Wayback Machine ===')
+        # Test Wayback
+        results['logs'].append('\n=== Wayback Machine ===')
         try:
             wayback = PublicAPISearcher()
-            urls = wayback.search_wayback('*.edu.tr/*id=*', max_results=20)
+            urls = wayback.search_wayback('*.com.tr/*', 20)
             
             if urls:
                 results['working_engines'].append('Wayback Machine')
                 results['sample_results']['Wayback Machine'] = urls[:3]
-                results['logs'].append(f'✓ Wayback: Found {len(urls)} URLs')
+                results['logs'].append(f'✓ Found {len(urls)} URLs')
             else:
                 results['failed_engines'].append('Wayback Machine')
-                results['logs'].append('✗ Wayback: No archived URLs for this pattern')
+                results['logs'].append('✗ No URLs')
                 
             results['engines_tested'].append('Wayback Machine')
         except Exception as e:
             results['failed_engines'].append('Wayback Machine')
-            results['logs'].append(f'✗ Wayback Error: {str(e)}')
-        
-        # Test 4: Multi-Engine
-        results['logs'].append('\n=== Testing Multi-Engine ===')
-        try:
-            multi = MultiEngineDork()
-            urls = multi.search(test_query, max_results=20)
-            
-            if urls:
-                results['working_engines'].append('Multi-Engine')
-                results['sample_results']['Multi-Engine'] = urls[:5]
-                results['logs'].append(f'✓ Multi-Engine: Found {len(urls)} total URLs')
-            else:
-                results['failed_engines'].append('Multi-Engine')
-                results['logs'].append('✗ Multi-Engine: No results from any source')
-                
-            results['engines_tested'].append('Multi-Engine')
-        except Exception as e:
-            results['failed_engines'].append('Multi-Engine')
-            results['logs'].append(f'✗ Multi-Engine Error: {str(e)}')
+            results['logs'].append(f'✗ Error: {e}')
         
     except ImportError as e:
-        results['logs'].append(f'✗ Import Error: {str(e)}')
-        results['logs'].append('Make sure dork_engine_improved.py is deployed')
-    except Exception as e:
-        results['logs'].append(f'✗ Fatal Error: {str(e)}')
-        import traceback
-        results['logs'].append(traceback.format_exc())
+        results['logs'].append(f'✗ Import Error: {e}')
     
     return render_template('debug_search.html', results=results)
 
@@ -772,7 +500,7 @@ def debug_test_search():
 @app.route('/debug/test-wayback-turkish')
 @login_required
 def debug_test_wayback_turkish():
-    """Test Wayback Machine specifically for Turkish sites"""
+    """Test Turkish sites via Wayback"""
     results = {
         'tested_domains': [],
         'successful_domains': [],
@@ -786,45 +514,32 @@ def debug_test_wayback_turkish():
         
         wayback = PublicAPISearcher()
         
-        # Test different Turkish domains
-        turkish_domains = [
-            ('*.edu.tr/*id=*', 'Turkish Educational'),
-            ('*.gov.tr/*id=*', 'Turkish Government'),
-            ('*.com.tr/*php?id=*', 'Turkish Commercial'),
-            ('*.tr/*haber.php*', 'Turkish News Sites'),
+        patterns = [
+            ('*.com.tr/*', 'Commercial'),
+            ('*.org.tr/*', 'Organizations'),
         ]
         
-        for pattern, description in turkish_domains:
-            results['logs'].append(f'\nTesting: {description}')
-            results['logs'].append(f'Pattern: {pattern}')
-            results['tested_domains'].append(description)
+        for pattern, desc in patterns:
+            results['logs'].append(f'\n{desc}: {pattern}')
+            results['tested_domains'].append(desc)
             
             try:
-                urls = wayback.search_wayback(pattern, max_results=15)
+                urls = wayback.search_wayback(pattern, 15)
                 
                 if urls:
-                    results['successful_domains'].append(description)
+                    results['successful_domains'].append(desc)
                     results['total_urls_found'] += len(urls)
                     results['sample_urls'].extend(urls[:3])
-                    results['logs'].append(f'✓ Found {len(urls)} archived URLs')
+                    results['logs'].append(f'✓ Found {len(urls)}')
                 else:
-                    results['logs'].append('✗ No archived URLs found')
-                    
+                    results['logs'].append('✗ No URLs')
             except Exception as e:
-                results['logs'].append(f'✗ Error: {str(e)}')
+                results['logs'].append(f'✗ Error: {e}')
         
-        # Summary
-        results['logs'].append('\n=== SUMMARY ===')
-        results['logs'].append(f'Tested: {len(results["tested_domains"])} domain patterns')
-        results['logs'].append(f'Successful: {len(results["successful_domains"])} patterns')
-        results['logs'].append(f'Total URLs: {results["total_urls_found"]}')
+        results['logs'].append(f'\nTotal: {results["total_urls_found"]} URLs')
         
     except ImportError as e:
-        results['logs'].append(f'✗ Import Error: {str(e)}')
-    except Exception as e:
-        results['logs'].append(f'✗ Fatal Error: {str(e)}')
-        import traceback
-        results['logs'].append(traceback.format_exc())
+        results['logs'].append(f'✗ Import: {e}')
     
     return render_template('debug_wayback.html', results=results)
 
@@ -858,12 +573,12 @@ def not_found(error):
 def internal_error(error):
     return render_template('500.html'), 500
 
-# Health check endpoint
+# Health check
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy', 'version': '1.9.0.3'}), 200
 
-# For local development only
+# Run
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
