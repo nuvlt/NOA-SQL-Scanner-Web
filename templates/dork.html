@@ -5,6 +5,12 @@
 {% block content %}
 <h1 class="mb-4"><i class="fas fa-binoculars"></i> Dork Search</h1>
 
+<div class="alert alert-info mb-4">
+    <i class="fas fa-info-circle"></i>
+    <strong>Recommended:</strong> Use <strong>Wayback Machine</strong> (default) for best results. 
+    It searches Internet Archive for historical URLs - no rate limits, no blocking!
+</div>
+
 <div class="row">
     <div class="col-md-8">
         <div class="card">
@@ -16,23 +22,22 @@
                     <div class="mb-3">
                         <label for="dork_query" class="form-label">Dork Query</label>
                         <input type="text" class="form-control" id="dork_query" name="dork_query" 
-                               placeholder='inurl:".php?id="' required>
+                               placeholder='site:.tr inurl:"id="' required value='site:.edu.tr inurl:"id="'>
                         <small class="form-text text-muted">
-                            Enter dork query to find potential vulnerable URLs
+                            <strong>Must use site: syntax</strong> for Wayback searches (e.g., site:.tr, site:.edu.tr)
                         </small>
                     </div>
                     
                     <div class="mb-3">
                         <label for="engine" class="form-label">Search Engine</label>
                         <select class="form-select" id="engine" name="engine">
-                            <option value="multi" selected>Multi-Engine (Recommended)</option>
+                            <option value="wayback" selected>Wayback Machine (Recommended)</option>
+                            <option value="multi">Multi-Engine (Wayback + Others)</option>
                             <option value="duckduckgo">DuckDuckGo Only</option>
-                            <option value="bing">Bing Only</option>
-                            <option value="google">Google (Limited)</option>
-                            <option value="yandex">Yandex (Limited)</option>
+                            <option value="brave">Brave Only</option>
                         </select>
                         <small class="form-text text-muted">
-                            Multi-engine tries DuckDuckGo, Bing, and API-based engines if configured
+                            <strong>Wayback Machine</strong> searches Internet Archive for historical URLs
                         </small>
                     </div>
                     
@@ -42,14 +47,13 @@
                                value="50" min="10" max="100">
                     </div>
                     
-                    <div class="alert alert-info" role="alert">
-                        <i class="fas fa-info-circle"></i>
-                        <strong>Tips:</strong>
-                        <ul class="mb-0 mt-2">
-                            <li><strong>Multi-Engine</strong> tries multiple sources for best results</li>
-                            <li><strong>DuckDuckGo</strong> has no rate limit but may return fewer results</li>
-                            <li><strong>API Keys</strong> (SerpAPI, Google CSE) provide most reliable results</li>
-                            <li>Configure API keys in <code>.env</code> file for best performance</li>
+                    <div class="alert alert-warning" role="alert">
+                        <h6><i class="fas fa-lightbulb"></i> Tips for Best Results:</h6>
+                        <ul class="mb-0">
+                            <li>Always start with <code>site:</code> followed by domain (e.g., <code>site:.tr</code>)</li>
+                            <li>Add URL patterns: <code>site:.edu.tr inurl:"id="</code></li>
+                            <li>Wayback searches archived historical URLs (millions available!)</li>
+                            <li>Turkish sites: Try <code>.edu.tr</code>, <code>.gov.tr</code>, <code>.com.tr</code></li>
                         </ul>
                     </div>
                     
@@ -59,79 +63,63 @@
                 </form>
             </div>
         </div>
-        
-        <div class="card mt-3">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-cog"></i> Optional: Configure API Keys</h5>
-            </div>
-            <div class="card-body">
-                <p>For best results, configure these API keys in your <code>.env</code> file:</p>
-                
-                <h6>1. SerpAPI (Recommended)</h6>
-                <ul>
-                    <li>Sign up: <a href="https://serpapi.com" target="_blank">serpapi.com</a></li>
-                    <li>Free tier: 100 searches/month</li>
-                    <li>Add to .env: <code>SERPAPI_KEY=your_key</code></li>
-                </ul>
-                
-                <h6>2. Google Custom Search (Alternative)</h6>
-                <ul>
-                    <li>Create CSE: <a href="https://programmablesearchengine.google.com/" target="_blank">Google CSE</a></li>
-                    <li>Get API key: <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud</a></li>
-                    <li>Free tier: 100 searches/day</li>
-                </ul>
-                
-                <div class="alert alert-warning mt-3">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    Without API keys, the scanner uses free methods (DuckDuckGo, Bing) which may be rate-limited.
-                </div>
-            </div>
-        </div>
     </div>
     
     <div class="col-md-4">
         <div class="card">
             <div class="card-header bg-warning">
-                <h5 class="mb-0"><i class="fas fa-list"></i> Predefined Dorks</h5>
+                <h5 class="mb-0"><i class="fas fa-list"></i> Quick Searches</h5>
             </div>
             <div class="card-body">
                 <p class="text-muted">Click to use:</p>
                 <div class="list-group">
-                    {% for dork in predefined_dorks %}
                     <button type="button" class="list-group-item list-group-item-action dork-preset" 
-                            data-dork="{{ dork }}">
-                        <small><code>{{ dork }}</code></small>
+                            data-dork='site:.edu.tr inurl:"id="'>
+                        <small><code>site:.edu.tr inurl:"id="</code></small><br>
+                        <small class="text-muted">Turkish Educational Sites</small>
                     </button>
-                    {% endfor %}
+                    <button type="button" class="list-group-item list-group-item-action dork-preset" 
+                            data-dork='site:.gov.tr inurl:"id="'>
+                        <small><code>site:.gov.tr inurl:"id="</code></small><br>
+                        <small class="text-muted">Turkish Government Sites</small>
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action dork-preset" 
+                            data-dork='site:.com.tr inurl:"php?id="'>
+                        <small><code>site:.com.tr inurl:"php?id="</code></small><br>
+                        <small class="text-muted">Turkish Commercial Sites</small>
+                    </button>
+                    <button type="button" class="list-group-item list-group-item-action dork-preset" 
+                            data-dork='site:.tr inurl:"haber.php"'>
+                        <small><code>site:.tr inurl:"haber.php"</code></small><br>
+                        <small class="text-muted">Turkish News Sites</small>
+                    </button>
                 </div>
             </div>
         </div>
         
         <div class="card mt-3">
             <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="fas fa-book"></i> Dork Examples</h5>
+                <h5 class="mb-0"><i class="fas fa-history"></i> About Wayback Machine</h5>
             </div>
             <div class="card-body">
-                <h6>Turkish Sites:</h6>
+                <h6>Why Wayback?</h6>
                 <ul class="small">
-                    <li><code>site:.tr inurl:".php?id="</code></li>
-                    <li><code>site:.com.tr inurl:"urun.php"</code></li>
-                    <li><code>site:.tr inurl:"haber.php?id="</code></li>
+                    <li><i class="fas fa-check text-success"></i> <strong>No rate limits</strong></li>
+                    <li><i class="fas fa-check text-success"></i> <strong>No API keys needed</strong></li>
+                    <li><i class="fas fa-check text-success"></i> <strong>Never blocked</strong></li>
+                    <li><i class="fas fa-check text-success"></i> <strong>Millions of archived URLs</strong></li>
                 </ul>
                 
-                <h6>SQL Injection Targets:</h6>
-                <ul class="small">
-                    <li><code>inurl:".php?id=" intext:"mysql"</code></li>
-                    <li><code>inurl:"product.php?id="</code></li>
-                    <li><code>inurl:"news.php?id="</code></li>
-                </ul>
+                <h6 class="mt-3">How it works:</h6>
+                <p class="small">
+                    Internet Archive has been crawling websites since 1996. 
+                    It stores historical snapshots of billions of pages, 
+                    including many vulnerable URLs that still exist today.
+                </p>
                 
-                <h6>By Technology:</h6>
-                <ul class="small">
-                    <li><code>inurl:".asp?id="</code> (ASP)</li>
-                    <li><code>inurl:".aspx?id="</code> (ASP.NET)</li>
-                    <li><code>inurl:".jsp?id="</code> (Java)</li>
-                </ul>
+                <a href="{{ url_for('debug_wayback_direct') }}" class="btn btn-sm btn-info w-100" target="_blank">
+                    <i class="fas fa-vial"></i> Test Wayback Machine
+                </a>
             </div>
         </div>
     </div>
