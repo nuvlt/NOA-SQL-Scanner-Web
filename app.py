@@ -116,12 +116,14 @@ def scan_progress(scan_id):
         return redirect(url_for('dashboard'))
     return render_template('scan_progress.html', scan_id=scan_id, scan_info=scan_info)
 
+# app.py'deki /dork route'unu bu versiyonla değiştirin
+
 @app.route('/dork', methods=['GET', 'POST'])
 @login_required
 def dork_search():
     if request.method == 'POST':
         dork_query = request.form.get('dork_query')
-        search_engine = request.form.get('engine', 'multi')
+        search_engine = request.form.get('engine', 'wayback')  # Default to Wayback!
         max_results = int(request.form.get('max_results', 50))
         
         if max_results > Config.DORK_MAX_RESULTS:
@@ -131,68 +133,113 @@ def dork_search():
         errors = []
         
         try:
-            # Try to import improved engine
-            try:
-                from dork_engine_improved import (
-                    MultiEngineDork, DuckDuckGoAPIDork, BraveDork, 
-                    StartpageDork, PublicAPISearcher, DEMO_URLS as DEMO_IMPROVED
-                )
-                flash('Using improved multi-engine search...', 'info')
+            # PRIORITY 1: Wayback Machine (most reliable!)
+            if search_engine == 'wayback' or search_engine == 'multi':
+                flash('Searching Wayback Machine (Internet Archive)...', 'info')
                 
-                # Multi-engine search
-                if search_engine == 'multi':
-                    serpapi_key = os.environ.get('SERPAPI_KEY')
-                    searcher = MultiEngineDork(serpapi_key=serpapi_key)
-                    all_urls = searcher.search(dork_query, max_results)
-                    
-                # Single engines
-                elif search_engine == 'duckduckgo':
-                    ddg = DuckDuckGoAPIDork()
-                    all_urls = ddg.search(dork_query, max_results)
-                elif search_engine == 'brave':
-                    brave = BraveDork()
-                    all_urls = brave.search(dork_query, max_results)
-                elif search_engine == 'wayback':
+                try:
+                    import requests
                     import re
+                    
+                    # Extract domain from dork query
                     domain_match = re.search(r'site:([^\s]+)', dork_query)
+                    
                     if domain_match:
-                        domain = domain_match.group(1)
-                        wayback = PublicAPISearcher()
-                        all_urls = wayback.search_wayback(f'*.{domain}/*', max_results)
+                        domain = domain_match.group(1).strip()
+                        
+                        # Build Wayback patterns
+                        patterns = [
+                            f'*.{domain}/*id=*',
+                            f'*.{domain}/*php?*',
+                            f'*.{domain}/*?id=*',
+                        ]
+                        
+                        for pattern in patterns:
+                            try:
+                                url = "http://web.archive.org/cdx/search/cdx"
+                                params = {
+                                    'url': pattern,
+                                    'matchType': 'domain',
+                                    'output': 'json',
+                                    'fl': 'original',
+                                    'collapse': 'urlkey',
+                                    'limit': max_results
+                                }
+                                
+                                response = requests.get(url, params=params, timeout=30)
+                                
+                                if response.status_code == 200:
+                                    data = response.json()
+                                    
+                                    for item in data[1:]:  # Skip header
+                                        if isinstance(item, list) and len(item) > 0:
+                                            found_url = item[0]
+                                            
+                                            # Filter for URLs with parameters
+                                            if '?' in found_url and found_url.startswith('http'):
+                                                all_urls.append(found_url)
+                                
+                                print(f"[+] Wayback pattern {pattern}: Found {len(data)-1} URLs")
+                                
+                            except Exception as e:
+                                print(f"[-] Wayback pattern {pattern} error: {e}")
+                                continue
+                        
+                        if all_urls:
+                            flash(f'Wayback Machine: Found {len(all_urls)} archived URLs!', 'success')
+                        else:
+                            errors.append('Wayback: No archived URLs found for this domain')
+                    
                     else:
-                        flash('For Wayback, use site: syntax (e.g., site:.tr)', 'warning')
+                        flash('For Wayback, use site: syntax (e.g., site:.tr or site:.edu.tr)', 'warning')
+                        errors.append('Invalid query format for Wayback search')
                 
-            except ImportError as e:
-                print(f"[!] Could not import improved engine: {e}")
-                flash('Using fallback search engines...', 'warning')
-                
-                # Fallback to original engines
-                if search_engine == 'google':
+                except Exception as e:
+                    errors.append(f'Wayback error: {str(e)}')
+                    print(f"[!] Wayback error: {e}")
+            
+            # PRIORITY 2: Try improved engines (if available)
+            if len(all_urls) < 10 and search_engine == 'multi':
+                try:
+                    from dork_engine_improved import DuckDuckGoAPIDork, MultiEngineDork
+                    
+                    flash('Trying additional search engines...', 'info')
+                    
+                    # Try DuckDuckGo API
                     try:
-                        dork = GoogleDork()
-                        urls = dork.search(dork_query, max_results)
-                        all_urls.extend(urls)
+                        ddg = DuckDuckGoAPIDork()
+                        urls = ddg.search(dork_query, max_results=20)
+                        if urls:
+                            all_urls.extend(urls)
+                            flash(f'DuckDuckGo: Found {len(urls)} URLs', 'success')
                     except Exception as e:
-                        errors.append(f'Google error: {str(e)}')
-                
-                elif search_engine == 'yandex':
-                    try:
-                        dork = YandexDork()
-                        urls = dork.search(dork_query, max_results)
-                        all_urls.extend(urls)
-                    except Exception as e:
-                        errors.append(f'Yandex error: {str(e)}')
+                        errors.append(f'DuckDuckGo: {str(e)}')
+                    
+                except ImportError:
+                    errors.append('Advanced search engines not available')
             
             # Remove duplicates
             all_urls = list(set(all_urls))
             
-            # Show results or demo URLs
-            if all_urls:
-                flash(f'Found {len(all_urls)} unique URLs!', 'success')
-                dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
-            else:
+            # If no results, use demo URLs
+            if not all_urls:
                 flash('No results found. Showing demo vulnerable URLs for testing.', 'warning')
-                all_urls = DEMO_URLS
+                
+                # Try to import DEMO_URLS
+                try:
+                    from dork_engine_improved import DEMO_URLS as DEMO_IMPROVED
+                    all_urls = DEMO_IMPROVED
+                except ImportError:
+                    from dork_engine import DEMO_URLS
+                    all_urls = DEMO_URLS
+            else:
+                flash(f'Total: Found {len(all_urls)} unique URLs!', 'success')
+                
+                # Save to database
+                try:
+                    dork_id = db.save_dork_results(dork_query, search_engine, all_urls)
+                except Exception as e:
+                    print(f"[!] Database save error: {e}")
             
             # Show any errors
             if errors:
@@ -209,7 +256,13 @@ def dork_search():
             print(f"[!] Dork search error: {e}")
             import traceback
             traceback.print_exc()
-            return redirect(url_for('dork_search'))
+            
+            # Return demo URLs as fallback
+            from dork_engine import DEMO_URLS
+            return render_template('dork_results.html', 
+                                 urls=DEMO_URLS, 
+                                 dork_query=dork_query, 
+                                 errors=[str(e)])
     
     return render_template('dork.html', predefined_dorks=SQL_DORKS)
 
